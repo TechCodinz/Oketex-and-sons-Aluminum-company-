@@ -1,0 +1,21 @@
+import { useState } from "react";
+import { PageHead, StatusBadge } from "@/components/StatusBadge";
+import { formatNGN } from "@/lib/money";
+import { getOrders, getQuotes } from "@/lib/storage";
+import { products, categories } from "@/data/catalog";
+import { Button } from "@/components/ui/button";
+export default function Admin(){
+ const [pw,setPw]=useState(""); const [ok,setOk]=useState(sessionStorage.getItem("oketex-admin")==="1");
+ const orders=getOrders(); const quotes=getQuotes();
+ if(!ok) return (<div><PageHead kicker="Demo Admin" title="Admin — Demo" lead="Demo admin for this standalone version. Password: admin123. In production this must be replaced with real authentication." /><div className="mx-auto max-w-md px-4 py-12"><label className="label-tech">Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryLogin()} className="field-tech font-tech" /><Button className="w-full mt-6 rounded-none font-display uppercase" onClick={tryLogin}>Sign in (Demo)</Button></div></div>);
+ function tryLogin(){ if(pw==="admin123"||sessionStorage.getItem("oketex-admin")==="1"){ sessionStorage.setItem("oketex-admin","1"); setOk(true);} else alert("Wrong password — demo password is admin123"); }
+ const revenue=orders.filter(o=>o.status!=="cancelled").reduce((s,o)=>s+o.totalNgn,0);
+ return (<div><PageHead kicker="Demo Admin — local data only" title="Oketex Admin (Demo)" lead="Reads quotes & orders saved in this browser. Demo only — not a real backend." />
+ <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 space-y-10">
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border hairline">{[{l:"Revenue (local orders)",v:formatNGN(revenue)},{l:"Orders (local)",v:String(orders.length)},{l:"Quotes (local)",v:String(quotes.length)},{l:"Products live",v:String(products.length)}].map(c=>(<div key={c.l} className="bg-background p-5"><div className="font-display font-bold text-2xl text-primary">{c.v}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">{c.l}</div></div>))}</div>
+  <section><h2 className="font-display font-bold uppercase text-2xl mb-4">Quotes saved on this device ({quotes.length})</h2>{!quotes.length?<p className="font-tech text-sm text-muted-foreground">None yet — create one in the Pro Calculator.</p>:<div className="border hairline">{quotes.map((q,i)=>(<div key={q.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between ${i>0?"border-t hairline":""}`}><div><p className="font-tech font-semibold">{q.code} — {q.name} ({q.phone})</p><p className="font-tech text-[11px] text-muted-foreground">{q.roofType} · {q.areaM2}m² · {new Date(q.createdAt).toLocaleString("en-NG")}</p></div><div className="flex items-center gap-4"><span className="font-tech">{formatNGN(q.estimateNgn)}</span><StatusBadge status={q.status} /></div></div>))}</div>}</section>
+  <section><h2 className="font-display font-bold uppercase text-2xl mb-4">Orders saved on this device ({orders.length})</h2>{!orders.length?<p className="font-tech text-sm text-muted-foreground">None yet.</p>:<div className="border hairline">{orders.map((o,i)=>(<div key={o.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between ${i>0?"border-t hairline":""}`}><div><p className="font-tech font-semibold">{o.code} — {o.name} ({o.phone})</p><p className="font-tech text-[11px] text-muted-foreground">{o.items.length} items · {o.address}</p></div><div className="flex items-center gap-4"><span className="font-tech">{formatNGN(o.totalNgn)}</span><StatusBadge status={o.status} /></div></div>))}</div>}</section>
+  <section><h2 className="font-display font-bold uppercase text-2xl mb-4">Catalog ({products.length} products, {categories.length} categories)</h2><div className="border hairline">{products.map((p,i)=>(<div key={p.id} className={`px-5 py-3 flex justify-between text-sm ${i>0?"border-t hairline":""}`}><span>{p.name}</span><span className="font-tech">{formatNGN(p.priceNgn)} {p.unit} · stock {p.stock}</span></div>))}</div></section>
+  <Button variant="outline" className="rounded-none font-display uppercase" onClick={()=>{sessionStorage.removeItem("oketex-admin"); setOk(false);}}>Sign out</Button>
+ </div></div>);
+}
