@@ -2,19 +2,29 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Menu, Phone, ShoppingCart } from "lucide-react";
 import { BUSINESS } from "@/contracts/constants";
+import { getBusiness, businessWaLink } from "@/lib/settings";
 import { useCart } from "@/lib/cart";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 const NAV = [
   { to: "/shop", label: "Shop" },
-  { to: "/quote", label: "Pro Calculator" },
-  { to: "/snap-measure", label: "Snap-Measure" },
+  { to: "/quote", label: "Quote" },
+  { to: "/estimator", label: "Estimator" },
   { to: "/visualizer", label: "Visualizer" },
   { to: "/tools", label: "Tools" },
-  { to: "/services", label: "Services" },
-  { to: "/gallery", label: "Projects" },
+  { to: "/build", label: "Build A–Z" },
+  { to: "/workspace", label: "Workspace" },
+  { to: "/book", label: "Book" },
+  { to: "/partners", label: "Partners" },
+  { to: "/gallery", label: "Gallery" },
   { to: "/track", label: "Track" },
-  { to: "/assistant", label: "Advisor" },
+  { to: "/assistant", label: "Assistant" },
+];
+const NAV_EXTRA = [
+  { to: "/snap-measure", label: "Snap-Measure" },
+  { to: "/services", label: "Services" },
+  { to: "/join", label: "Join as Pro/Seller" },
+  { to: "/partner-status", label: "Partner Status" },
 ];
 export function LogoMark({ className }: { className?: string }) {
   return (<svg viewBox="0 0 40 40" className={className} aria-hidden="true"><rect x="2" y="2" width="36" height="36" fill="none" stroke="#FF6026" strokeWidth="2.5" /><path d="M9 29 L20 10 L31 29" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" /><line x1="14" y1="22" x2="26" y2="22" stroke="#FF6026" strokeWidth="2.5" /></svg>);
@@ -31,12 +41,12 @@ export function SiteHeader() {
         <Link to="/" className="flex items-center gap-3 min-w-0"><LogoMark className="h-9 w-9 shrink-0 text-foreground" /><div className="leading-none min-w-0"><div className="font-display font-bold text-lg tracking-wide uppercase truncate">Oketex <span className="brand-gradient">&amp;</span> Sons</div><div className="font-tech text-[10px] tracking-[0.28em] text-muted-foreground uppercase">Aluminum Co.</div></div></Link>
         <nav className="hidden lg:flex items-center gap-1 ml-4 flex-wrap">{NAV.map(item=>(<NavLink key={item.to} to={item.to} className={({isActive})=>`px-2.5 py-2 font-display font-semibold uppercase tracking-wider text-[13px] transition-colors hover:text-primary ${isActive?"text-primary":"text-foreground/80"}`}>{item.label}</NavLink>))}</nav>
         <div className="ml-auto flex items-center gap-2">
-          <a href={`tel:${BUSINESS.phone.replace(/\s/g,"")}`} className="hidden xl:flex items-center gap-2 font-tech text-xs text-muted-foreground hover:text-primary mr-2"><Phone className="h-3.5 w-3.5" />{BUSINESS.phone}</a>
+          <a href={`tel:${getBusiness().phone.replace(/\s/g,"")}`} className="hidden xl:flex items-center gap-2 font-tech text-xs text-muted-foreground hover:text-primary mr-2"><Phone className="h-3.5 w-3.5" />{getBusiness().phone}</a>
           <Button variant="ghost" size="icon" className="relative hover:text-primary" onClick={openCart} aria-label="Open cart"><ShoppingCart className="h-5 w-5" />{count>0 && <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground font-tech text-[10px] h-4 min-w-4 px-1 flex items-center justify-center">{count}</span>}</Button>
           <Link to="/admin" className="hidden sm:inline-flex border hairline px-3 py-2 font-display uppercase tracking-wider text-xs hover:text-primary">Admin</Link>
         </div>
       </div></div>
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetContent side="left" className="w-72 bg-background"><SheetHeader><SheetTitle className="flex items-center gap-2"><LogoMark className="h-7 w-7 text-foreground" /><span className="font-display uppercase">Oketex &amp; Sons</span></SheetTitle></SheetHeader><nav className="mt-8 flex flex-col gap-1">{NAV.map(item=>(<NavLink key={item.to} to={item.to} onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline hover:text-primary">{item.label}</NavLink>))}<NavLink to="/admin" onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline">Admin (Demo)</NavLink></nav></SheetContent></Sheet>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetContent side="left" className="w-72 bg-background"><SheetHeader><SheetTitle className="flex items-center gap-2"><LogoMark className="h-7 w-7 text-foreground" /><span className="font-display uppercase">Oketex &amp; Sons</span></SheetTitle></SheetHeader><nav className="mt-8 flex flex-col gap-1">{[...NAV, ...NAV_EXTRA].map(item=>(<NavLink key={item.to} to={item.to} onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline hover:text-primary">{item.label}</NavLink>))}<NavLink to="/admin" onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline">Admin (Demo)</NavLink></nav></SheetContent></Sheet>
     </header>
   );
 }

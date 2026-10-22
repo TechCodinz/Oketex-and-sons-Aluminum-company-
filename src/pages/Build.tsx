@@ -1,0 +1,89 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router";
+import { ArrowRight, CheckCircle2, Circle } from "lucide-react";
+import { PageHead } from "@/components/StatusBadge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getJourney, saveJourney } from "@/lib/proStorage";
+
+interface Stage {
+  n: number; title: string; involves: string[]; materials: string[];
+  supplied: boolean; suppliedNote: string; shopCat?: string;
+  duration: string; tips: [string, string];
+  tool: { label: string; to: string }; bookService: string; bookLabel: string;
+}
+const STAGES: Stage[] = [
+  { n: 1, title: "Foundation & Earthworks", involves: ["Setting out the building lines and squaring corners (3-4-5 method)", "Excavation to firm, undisturbed ground", "Blinding, hardcore fill and compaction", "DPC membrane and anti-termite treatment", "Strip/pad foundation concrete"], materials: ["Cement, sharp sand, granite", "Hardcore & laterite", "DPC membrane", "Pegs, line & profiles"], supplied: false, suppliedNote: "Partner trade", duration: "1–3 weeks", tips: ["Square corners with equal diagonals before any concrete is poured.", "Never found on loose or filled soil — dig to firm ground."], tool: { label: "Square & Diagonal Check", to: "/tools#square" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 2, title: "Blockwork & Masonry", involves: ["Laying 9\" blocks below ground, 6\"/9\" above", "Mortar mixed 1:4 or 1:6, joints ~10mm", "Lintels cast over doors and windows", "Walls plumbed and levelled course by course", "Curing by water for several days"], materials: ["Sandcrete blocks 6\" / 9\"", "Cement & soft sand", "Lintel reinforcement", "Wall ties & DPC"], supplied: false, suppliedNote: "Partner trade", duration: "2–4 weeks", tips: ["Count blocks at 10 per m² of wall, then add 5% for breakage.", "Wet blocks before laying in hot sun so they don't steal mortar water."], tool: { label: "Block & Concrete Estimator", to: "/tools#block-concrete" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 3, title: "Concrete Works & Ring Beam", involves: ["Formwork for columns, beams and lintels", "Reinforcement placed, tied and covered", "Ring beam cast at roof level to tie the walls", "Casting with proper vibration/compaction", "Curing 7–14 days before loading"], materials: ["Cement, granite, sharp sand", "Rebar 10–16mm", "Formwork timber & props", "Binding wire"], supplied: false, suppliedNote: "Partner trade", duration: "1–3 weeks", tips: ["Use the dry-volume method (×1.54) when batching by volume — wet volume under-orders cement.", "Keep concrete wet while curing; strength is made in the first week."], tool: { label: "Block & Concrete Estimator", to: "/tools#block-concrete" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 4, title: "Carpentry & Roof Timber Structure", involves: ["Wall plates bedded level on the ring beam", "Trusses / rafters and purlins to design spacing", "Ceiling noggins and joists fixed", "Fascia boards fitted straight and true", "Timber treated against termites and borers"], materials: ["Treated timber 2×2, 2×3, 2×4, 3×4", "Nails & wall-plate straps", "Wood preservative", "Fascia boards"], supplied: false, suppliedNote: "Partner trade — purlin quantities come from the Pro Roof Calculator BOQ", duration: "1–2 weeks", tips: ["Optimise cut lengths before buying — offcuts under 0.3m are pure waste.", "Check every purlin line with a string before the sheets go on."], tool: { label: "Cut-Length Optimizer", to: "/tools#cut" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 5, title: "Roofing", involves: ["Sheets/tiles supplied cut to exact slope lengths", "Fixing with EPDM-washer self-drilling screws", "Ridge caps, valleys and flashings sealed", "Optional foil insulation under the sheets", "Gutters and downpipes fitted (see Stage 14)"], materials: ["Longspan / Metcoppo / stone-coated", "Ridge caps & flashing", "Self-drilling screws", "Reflective foil insulation"], supplied: true, suppliedNote: "Supplied by Oketex — our core", shopCat: "roofing-sheets", duration: "3–10 days", tips: ["True roof area = plan area × 1/cos(pitch) — flat-area quotes under-order steep roofs.", "Fix on the crown of the profile, never in the valley where water runs."], tool: { label: "Pro Roof Calculator", to: "/quote" }, bookService: "installation", bookLabel: "Book installation" },
+  { n: 6, title: "Windows, Doors & Glazing", involves: ["Openings measured on site (width, height, diagonals)", "Casement/sliding systems fabricated to size", "Frames installed plumb and sealed", "Glass, hardware and multi-point locks fitted", "Final adjustment and weather-sealing"], materials: ["Casement & sliding systems", "5–10mm glass (clear/tinted/toughened)", "Aluminium profiles", "Locks, hinges & handles"], supplied: true, suppliedNote: "Supplied by Oketex — fabricated in-house", shopCat: "windows-doors", duration: "1–3 weeks (fabrication)", tips: ["Measure diagonals of every opening — out-of-square openings are the #1 cause of leaks.", "Order windows after plastering dimensions are known, not from the plan alone."], tool: { label: "Window & Door Pricer", to: "/tools" }, bookService: "windows-doors-survey", bookLabel: "Book a survey" },
+  { n: 7, title: "Ceilings & POP", involves: ["Ceiling joists/noggins set out level", "POP casting and screeding, or board ceilings", "Cornice and feature designs cast in place", "Lighting points coordinated with the electrician", "Sanding, filling and prep for paint"], materials: ["POP powder & fibre", "Ceiling boards", "Cornice mouldings", "Screws & bonding"], supplied: false, suppliedNote: "Partner trade", duration: "1–3 weeks", tips: ["Record ceiling areas room-by-room in the Pro Workspace measurement sheet before ordering.", "Fix lighting positions before the ceiling closes — rework is expensive."], tool: { label: "Pro Workspace — measurement sheet", to: "/workspace" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 8, title: "Tiling & Flooring", involves: ["Floor screed laid to level and falls", "Tiles set with adhesive/cement and spacers", "Wall tiling in wet areas to full height", "Grouting and skirting", "Expansion joints on large floors"], materials: ["Floor & wall tiles", "Tile cement / adhesive", "Grout & spacers", "Screed sand & cement"], supplied: false, suppliedNote: "Partner trade", duration: "1–3 weeks", tips: ["Tiles needed = floor area + 10% for cuts and breakage.", "Check levels with a long straightedge before tiling, not after."], tool: { label: "Pro Workspace — measurement sheet", to: "/workspace" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 9, title: "Painting & Finishing", involves: ["Wall screeding/putty and sanding", "Primer/sealer coat inside and out", "Two coats emulsion internally", "Weather-shield coats externally", "Gloss/textured finishes to doors and features"], materials: ["Emulsion & gloss paints", "Screeding putty", "Primer / sealer", "Fillers & abrasives"], supplied: false, suppliedNote: "Partner trade", duration: "1–2 weeks", tips: ["Paint coverage is roughly 10–12 m² per litre per coat — measure wall area, don't guess drums.", "Never paint over damp: find and fix the moisture source first."], tool: { label: "Pro Workspace — measurement sheet", to: "/workspace" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 10, title: "Plumbing & Water Systems", involves: ["PPR piping for hot/cold distribution", "Soil and waste runs to inspection chambers", "Sanitary ware: WC, basins, showers", "Water storage tank and pump installation", "Soakaway / septic coordination"], materials: ["PPR pipes & fittings", "Sanitary ware", "Storage tank & pump", "Valves & taps"], supplied: false, suppliedNote: "Partner trade", duration: "1–2 weeks (+ first fix earlier)", tips: ["Pressure-test all concealed pipework before tiling closes it in.", "Keep plumbing and electrical runs separated and documented with photos."], tool: { label: "Pro Workspace — site notes", to: "/workspace" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 11, title: "Electrical, Lighting & Solar", involves: ["Conduit and wiring first-fix during blockwork", "Distribution board and protective devices", "Sockets, switches and lighting fittings", "Inverter/solar sizing to actual load list", "Testing and certification"], materials: ["Cables & conduit", "Distribution board & breakers", "Sockets, switches & fittings", "Panels, inverter & batteries (solar)"], supplied: false, suppliedNote: "Partner trade", duration: "1–2 weeks (+ first fix earlier)", tips: ["Size solar/inverter from a real load list, not a guess — list every appliance wattage.", "Photograph conduit routes before plastering for future fault-finding."], tool: { label: "Pro Workspace — site notes", to: "/workspace" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 12, title: "Steel & Metal Fabrication", involves: ["Main and pedestrian gates fabricated & hung", "Burglar-proof bars to windows", "Stair and balcony railings", "Water tank stands and security doors", "Anti-rust priming and finishing"], materials: ["Steel pipes & profiles", "Hinges, rollers & locks", "Anti-rust primer & paint", "Welding consumables"], supplied: false, suppliedNote: "Partner trade", duration: "1–3 weeks", tips: ["Run steel lengths through the Cut-Length Optimizer — gates eat expensive offcuts.", "Prime steel the same day it is fabricated; surface rust starts immediately."], tool: { label: "Cut-Length Optimizer", to: "/tools#cut" }, bookService: "consultation", bookLabel: "Book a pro" },
+  { n: 13, title: "ACP Cladding & Facades", involves: ["Aluminium subframe fixed plumb to the facade", "ACP panels cut, routed and folded", "Concealed fixing with shadow gaps", "Joints sealed against water ingress", "Signage and feature panels integrated"], materials: ["4mm ACP panels (PVDF)", "Aluminium subframe profiles", "Structural sealant", "Fixings & brackets"], supplied: true, suppliedNote: "Supplied by Oketex — panels & profiles in the Shop", shopCat: "profiles-panels", duration: "1–3 weeks", tips: ["Preview panel colours on your building in the Visualizer Studio before ordering.", "Keep protective film on panels until the facade is fully sealed."], tool: { label: "Visualizer Studio", to: "/visualizer" }, bookService: "cladding-survey", bookLabel: "Book a survey" },
+  { n: 14, title: "Gutters, Drainage & External Works", involves: ["Seamless gutters roll-formed to the roofline", "Downpipes sized to roof catchment", "Drainage channels away from the foundation", "Paving / interlocking coordination", "Fencing and external finishing"], materials: ["Aluminium gutter profile", "Downpipes, outlets & brackets", "Drainage channels", "Paving materials"], supplied: true, suppliedNote: "Supplied by Oketex — gutters & accessories", shopCat: "accessories", duration: "3–7 days", tips: ["Allow one downpipe per ~40m² of roof catchment.", "Always discharge rainwater away from the foundation, never against it."], tool: { label: "Gutter & Rainwater Sizer", to: "/tools" }, bookService: "measurement", bookLabel: "Book a measurement" },
+];
+
+export default function Build() {
+  const location = useLocation();
+  const [journey, setJourney] = useState<Record<number, boolean>>(() => getJourney());
+  const [open, setOpen] = useState<number>(5);
+  useEffect(() => { saveJourney(journey); }, [journey]);
+  useEffect(() => {
+    if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); const m = location.hash.match(/stage-(\d+)/); if (m) setOpen(Number(m[1])); }
+  }, [location.hash]);
+  const doneCount = STAGES.filter(s => journey[s.n]).length;
+  const pct = Math.round((doneCount / STAGES.length) * 100);
+  const C = 2 * Math.PI * 26;
+  return (<div>
+    <PageHead kicker="Build A–Z Hub" title="Everything for your building, in one place" lead="From foundation to finishing — plan, measure, price and book every section of your building. Tick stages off as you go; your progress saves on this device." />
+    {/* Journey progress */}
+    <div className="border-b hairline bg-card/40"><div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 flex flex-wrap items-center gap-8">
+      <div className="relative w-[72px] h-[72px] shrink-0">
+        <svg viewBox="0 0 72 72" className="w-full h-full -rotate-90"><circle cx="36" cy="36" r="26" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="7" /><circle cx="36" cy="36" r="26" fill="none" stroke="#FF6026" strokeWidth="7" strokeDasharray={C} strokeDashoffset={C - (C * pct) / 100} strokeLinecap="butt" /></svg>
+        <span className="absolute inset-0 flex items-center justify-center font-display font-bold text-lg text-primary">{pct}%</span>
+      </div>
+      <div className="min-w-[220px] flex-1">
+        <p className="font-display font-bold uppercase text-2xl">Your build journey — {doneCount} of {STAGES.length} stages done</p>
+        <div className="h-2 bg-white/10 mt-3 max-w-xl"><div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div>
+        <p className="font-tech text-[11px] text-muted-foreground mt-2">Oketex supplies stages 5, 6, 13 &amp; 14 directly. Partner trades are bookable for a general consultation.</p>
+      </div>
+    </div>
+    {/* Timeline strip */}
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 flex gap-2 overflow-x-auto no-print">
+      {STAGES.map(s => (<button key={s.n} onClick={() => { setOpen(s.n); document.querySelector(`#stage-${s.n}`)?.scrollIntoView({ behavior: "smooth" }); }} className={`shrink-0 border hairline px-3 py-2 font-tech text-[11px] uppercase tracking-wider cursor-pointer ${open === s.n ? "bg-primary text-primary-foreground" : journey[s.n] ? "border-primary/60 text-primary" : "hover:text-primary"}`}>{String(s.n).padStart(2, "0")} {s.title.split(" &")[0]}{journey[s.n] ? " ✓" : ""}</button>))}
+    </div></div>
+
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-4 pb-16">
+      {STAGES.map(s => { const isOpen = open === s.n; const done = !!journey[s.n]; return (
+        <section key={s.n} id={`stage-${s.n}`} className="border hairline bg-card scroll-mt-32">
+          <button className="w-full flex items-center gap-4 px-5 py-4 text-left cursor-pointer" onClick={() => setOpen(isOpen ? 0 : s.n)}>
+            <span className="font-display font-bold text-2xl text-primary w-10 shrink-0">{String(s.n).padStart(2, "0")}</span>
+            <span className="flex-1 min-w-0"><span className="font-display font-bold uppercase text-xl md:text-2xl block leading-tight">{s.title}</span>
+            <span className={`font-tech text-[10px] uppercase tracking-widest ${s.supplied ? "text-primary" : "text-muted-foreground"}`}>{s.suppliedNote} · Typical duration: {s.duration}</span></span>
+            {done ? <CheckCircle2 className="h-6 w-6 text-primary shrink-0" /> : <Circle className="h-6 w-6 text-muted-foreground shrink-0" />}
+          </button>
+          {isOpen && (<div className="px-5 pb-6 pt-1 border-t hairline">
+            <div className="grid md:grid-cols-2 gap-8 mt-4">
+              <div><p className="label-tech mb-3">What this stage involves</p><ul className="space-y-2 text-sm">{s.involves.map(t => (<li key={t} className="flex gap-3"><span className="text-primary">///</span>{t}</li>))}</ul>
+                <p className="label-tech mt-6 mb-3">Pro tips</p><ul className="space-y-2 text-sm text-muted-foreground">{s.tips.map(t => (<li key={t} className="flex gap-3"><span className="text-primary">▸</span>{t}</li>))}</ul></div>
+              <div><p className="label-tech mb-3">Key materials</p><div className="flex flex-wrap gap-2">{s.materials.map(m => (<span key={m} className="border hairline px-3 py-1.5 font-tech text-xs">{m}</span>))}</div>
+                <label className="flex items-center gap-3 mt-6 border hairline p-4 cursor-pointer hover:border-primary/60"><Checkbox checked={done} onCheckedChange={v => setJourney({ ...journey, [s.n]: !!v })} /><span className="text-sm">Mark this stage complete on my build</span></label>
+                <div className="flex flex-wrap gap-3 mt-5">
+                  {s.supplied && s.shopCat && (<Link to={`/shop?category=${s.shopCat}`} className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90">Shop materials <ArrowRight className="h-4 w-4" /></Link>)}
+                  <Link to={`/book?service=${s.bookService}`} className={`inline-flex items-center gap-2 font-display font-semibold uppercase tracking-wider px-5 h-11 ${s.supplied ? "border border-foreground/40 hover:border-primary hover:text-primary" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>{s.bookLabel} <ArrowRight className="h-4 w-4" /></Link>
+                  <Link to={s.tool.to} className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-5 h-11 hover:border-primary hover:text-primary">{s.tool.label}</Link>
+                  {!s.supplied && (<Link to="/partners" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-5 h-11 hover:border-primary hover:text-primary">Find a pro in the directory <ArrowRight className="h-4 w-4" /></Link>)}
+                </div>
+              </div>
+            </div>
+          </div>)}
+        </section>); })}
+      <p className="font-tech text-xs text-muted-foreground pt-2">Durations are typical for a single residential building and overlap between stages is normal. Partner-trade stages are delivered by independent professionals — Oketex books the consultation and supplies its own stages directly.</p>
+    </div>
+  </div>);
+}

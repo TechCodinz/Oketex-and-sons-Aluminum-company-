@@ -1,8 +1,11 @@
 // Engineering roof estimator — all totals computed here, no hardcoded totals.
 // Catalog prices: Longspan 0.45 ₦9,800/m, 0.55 ₦11,500/m, Metcoppo ₦12,800/m,
 // Stone-coated ₦6,900/tile (0.48m²), Gutter ₦6,500/m, Insulation ₦46,500/roll (30m²),
-// Fasteners ₦38,500/bucket (500). Estimator-only rates (labelled in UI):
-// Ridge caps & flashing ₦4,500/m, Timber purlins ₦1,800/m, Installation ₦2,200/m².
+// Fasteners ₦38,500/bucket (500). Estimator rates (ridge caps, timber purlins,
+// installation labour, and all delivery zone prices) are read at calculation
+// time from lib/settings.ts — defaults below, admin-overridable in
+// /admin → Settings & Rates.
+import { getRates } from "./settings";
 export type RoofStyle = "gable" | "hip" | "shed" | "flat" | "mansard";
 export type ProfileId = "longspan-045" | "longspan-055" | "metcoppo" | "corrugated" | "stone-coated";
 export interface RoofInput {
@@ -36,6 +39,7 @@ export const PROFILES: Record<ProfileId, { label: string; coverWidth: number; pr
 };
 export const AUTO_WASTE: Record<RoofStyle, number> = { gable: 8, hip: 12, shed: 5, flat: 5, mansard: 12 };
 export function calculateRoof(input: RoofInput): RoofResult {
+  const rates = getRates(); // admin-editable estimator rates (Settings & Rates)
   const wastePct = input.wastePct ?? AUTO_WASTE[input.style];
   const waste = wastePct / 100;
   const pitchUsed = input.style === "flat" ? Math.max(input.pitchDeg, 3) : input.pitchDeg;
@@ -86,11 +90,11 @@ export function calculateRoof(input: RoofInput): RoofResult {
   const ridgeTotalLen = ridgeLength + hipLength;
   if (ridgeTotalLen > 0 && prof.kind !== "tile") {
     const qty = Math.ceil(ridgeTotalLen * (1 + waste));
-    lines.push({ item: "Ridge caps & flashing", spec: `Ridge ${ridgeLength.toFixed(1)}m${hipLength?` + hips ${hipLength.toFixed(1)}m`:""}`, qty, unit: "m", unitPrice: 4500, total: qty * 4500, note: "estimator rate" });
+    lines.push({ item: "Ridge caps & flashing", spec: `Ridge ${ridgeLength.toFixed(1)}m${hipLength?` + hips ${hipLength.toFixed(1)}m`:""}`, qty, unit: "m", unitPrice: rates.ridgePerM, total: qty * rates.ridgePerM, note: "estimator rate" });
   }
   if (prof.kind === "tile" && ridgeTotalLen > 0) {
     const pieces = Math.ceil(ridgeTotalLen / 1.0);
-    lines.push({ item: "Ridge pieces (stone-coated)", spec: "~1.0m per piece", qty: pieces, unit: "pc", unitPrice: 4500, total: pieces * 4500, note: "estimator rate" });
+    lines.push({ item: "Ridge pieces (stone-coated)", spec: "~1.0m per piece", qty: pieces, unit: "pc", unitPrice: rates.ridgePerM, total: pieces * rates.ridgePerM, note: "estimator rate" });
   }
   // Fasteners for metal profiles
   if (prof.kind === "sheet" || prof.kind === "corrugated") {
@@ -102,7 +106,7 @@ export function calculateRoof(input: RoofInput): RoofResult {
   if (input.extras.timber) {
     const rowsPerSlope = Math.ceil(slopeLength / 0.9);
     const timberMetres = Math.ceil(rowsPerSlope * effLength * slopes);
-    lines.push({ item: "Timber purlins / battens", spec: `Rows every 0.9m — ${rowsPerSlope} rows/slope`, qty: timberMetres, unit: "m", unitPrice: 1800, total: timberMetres * 1800, note: "estimator rate" });
+    lines.push({ item: "Timber purlins / battens", spec: `Rows every 0.9m — ${rowsPerSlope} rows/slope`, qty: timberMetres, unit: "m", unitPrice: rates.timberPerM, total: timberMetres * rates.timberPerM, note: "estimator rate" });
   }
   if (input.extras.insulation) {
     const rolls = Math.ceil(trueRoofArea / 30);
@@ -114,10 +118,10 @@ export function calculateRoof(input: RoofInput): RoofResult {
   }
   if (input.extras.installation) {
     const qty = Math.round(trueRoofArea);
-    lines.push({ item: "Professional installation labour", spec: "Per m² of true roof area", qty, unit: "m²", unitPrice: 2200, total: qty * 2200, note: "estimator rate" });
+    lines.push({ item: "Professional installation labour", spec: "Per m² of true roof area", qty, unit: "m²", unitPrice: rates.installationPerM2, total: qty * rates.installationPerM2, note: "estimator rate" });
   }
   const subtotal = lines.reduce((s, l) => s + l.total, 0);
   const zone = DELIVERY_ZONES.find(z => z.id === input.deliveryZone) ?? DELIVERY_ZONES[0];
-  const transport = zone.price;
+  const transport = rates.deliveryZones[zone.id] ?? zone.price;
   return { effLength, effWidth, effPlanArea, slopeFactor, pitchUsed, slopeLength, trueRoofArea, slopes, sheetsAcross, totalMetres, cuttingList, ridgeLength, hipLength, wastePct, lines, subtotal, transport, grandTotal: subtotal + transport, tiles };
 }

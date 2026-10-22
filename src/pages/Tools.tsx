@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
+import ProToolsSections from "@/components/ProToolsSections";
 function Num({label,value,set,step="0.1"}:{label:string;value:number;set:(n:number)=>void;step?:string}){ return (<div><label className="label-tech">{label}</label><input type="number" step={step} value={value} onChange={e=>set(parseFloat(e.target.value)||0)} className="field-tech font-tech" /></div>); }
 function Card({title,children,result}:{title:string;children:React.ReactNode;result:React.ReactNode}){ return (<section className="border hairline bg-card p-6"><h3 className="font-display font-bold uppercase text-xl">{title}</h3><div className="grid grid-cols-2 gap-4 mt-5">{children}</div><div className="mt-5 border-t hairline pt-4 font-tech text-sm space-y-1">{result}</div></section>); }
 export default function Tools(){
@@ -13,7 +14,7 @@ export default function Tools(){
  const [winType,setWinType]=useState("casement"); const [ww,setWw]=useState(1.2); const [wh,setWh]=useState(1.2); const [glass,setGlass]=useState(1); const [finish,setFinish]=useState(1);
  const winArea=ww*wh; const winPrice=useMemo(()=>{ const base= winType==="casement"?145000/1.44 : winType==="sliding"?160000/1.44 : 95000/1.44; return Math.round(base*winArea*glass*finish/1000)*1000; },[winType,winArea,glass,finish]);
  const [convArea,setConvArea]=useState(150);
- return (<div><PageHead kicker="Engineering Tools Hub" title="Calculators that do the maths" lead="Five live tools used by our estimators — pitch, weight, rainwater, windows and coverage. All computed in your browser." />
+ return (<div><PageHead kicker="Engineering Tools Hub" title="Calculators that do the maths" lead="Ten live tools used by our estimators and pros on site — pitch, weight, rainwater, windows, coverage, tape fractions, squaring, cut optimisation and block & concrete quantities. All computed in your browser." />
  <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 grid lg:grid-cols-2 gap-6">
   <Card title="(a) Pitch Finder" result={<><p>Pitch: <b className="text-primary">{pitch.deg.toFixed(1)}°</b> · {pitch.pct.toFixed(0)}%</p><p>Slope factor: {pitch.factor.toFixed(3)} · Rafter length for this run: {pitch.rafter.toFixed(2)} m</p><p className="text-muted-foreground text-xs">deg = atan(rise/run), factor = 1/cos(deg)</p></>}>
    <Num label="Rise (m)" value={rise} set={setRise} /><Num label="Run (m)" value={run} set={setRun} /></Card>
@@ -28,5 +29,7 @@ export default function Tools(){
    <div><label className="label-tech">Finish</label><select value={finish} onChange={e=>setFinish(Number(e.target.value))} className="field-tech font-tech bg-background w-full"><option value={1}>Mill (×1.0)</option><option value={1.1}>Anodized (×1.1)</option><option value={1.2}>Powder-coated (×1.2)</option></select></div></Card>
   <Card title="(e) Coverage Converter" result={<><p>Stone-coated tiles: {Math.ceil(convArea/0.48).toLocaleString()} tiles</p><p>Longspan (1.0m cover, per slope metre): {(convArea).toFixed(0)} m² ÷ slope — use Pro Calculator for cutting list</p><p>Metcoppo metres ≈ {(convArea/0.96).toFixed(1)} m of width-coverage equivalent</p><p>Corrugated 3m sheets (0.9m cover): ~{Math.ceil(convArea/(3*0.9))} sheets (flat approx, slope increases this)</p><p>Insulation rolls: {Math.ceil(convArea/30)} rolls</p></>}>
    <Num label="Roof area (m²)" value={convArea} set={setConvArea} /><div className="font-tech text-xs text-muted-foreground self-end pb-3">For exact slope-corrected quantities, use the Pro Roof Calculator.</div></Card>
- </div></div>);
+ </div>
+ <ProToolsSections />
+</div>);
 }
