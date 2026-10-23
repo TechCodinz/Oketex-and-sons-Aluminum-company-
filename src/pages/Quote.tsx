@@ -10,7 +10,7 @@ import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink, getRates } from "@/lib/settings";
 import { ROOF_COLOURS } from "@/data/catalog";
 import { calculateRoof, DELIVERY_ZONES, type RoofStyle, type ProfileId, AUTO_WASTE } from "@/lib/roofEngine";
-import { saveQuote, quoteCode } from "@/lib/storage";
+import { saveQuoteAsync, quoteCode } from "@/lib/storage";
 
 export default function Quote(){
  const [params]=useSearchParams();
@@ -35,7 +35,7 @@ export default function Quote(){
  const doSave=()=>{
   if(contact.name.length<2) return toast.error("Enter your full name");
   if(contact.phone.length<7) return toast.error("Enter a valid phone number");
-  const code=quoteCode(); saveQuote({code,name:contact.name,phone:contact.phone,email:contact.email,note:contact.note,roofType:profile,colour,areaM2:Math.round(result.trueRoofArea),estimateNgn:result.grandTotal,boqSummary:boqText(),status:"new",createdAt:new Date().toISOString()}); setDone({code,total:result.grandTotal}); toast.success("Quote saved on this device");
+  const code=quoteCode(); void saveQuoteAsync({code,name:contact.name,phone:contact.phone,email:contact.email,note:contact.note,roofType:profile,colour,areaM2:Math.round(result.trueRoofArea),estimateNgn:result.grandTotal,boqSummary:boqText(),status:"new",createdAt:new Date().toISOString()}); setDone({code,total:result.grandTotal}); toast.success("Quote saved");
  };
  if(done) return (<div className="mx-auto max-w-2xl px-4 py-24 text-center"><CheckCircle2 className="h-14 w-14 text-primary mx-auto" /><h1 className="font-display font-bold uppercase text-4xl mt-6">Quote saved</h1><p className="text-muted-foreground mt-3">Reference <span className="font-tech text-primary">{done.code}</span> — saved on this device. Send it to us on WhatsApp for confirmation within 24 hours.</p><div className="mt-8 border hairline bg-card p-6"><p className="label-tech">Grand total</p><p className="font-display font-bold text-4xl text-primary mt-2">{formatNGN(done.total)}</p><p className="font-tech text-[11px] text-muted-foreground">{formatUSD(done.total)}</p></div><div className="flex flex-wrap gap-3 justify-center mt-6"><Button asChild className="rounded-none font-display uppercase"><a target="_blank" rel="noreferrer" href={businessWaLink(boqText())}>Send via WhatsApp</a></Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={()=>window.print()}>Print BOQ</Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={()=>setDone(null)}>New estimate</Button></div></div>);
 

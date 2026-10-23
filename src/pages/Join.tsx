@@ -3,7 +3,9 @@ import { Link } from "react-router";
 import { BadgeCheck, CheckCircle2, Copy, MessageCircle, Plus, Star, X } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { addPartner, partnerCode, type Partner } from "@/lib/partnerStorage";
+import { addPartnerAsync, partnerCode, type Partner } from "@/lib/partnerStorage";
+import { register as registerAccount } from "@/lib/auth";
+import { probeApi } from "@/lib/api";
 import { PRO_TRADES, SELLER_CATEGORIES, type PartnerRole } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
@@ -17,7 +19,7 @@ const EMPTY_ROW: ProdRow = { name: "", price: "", unit: "per piece" };
 export default function Join() {
   const TERMS = getPartnerTerms();
   const [role, setRole] = useState<PartnerRole>("pro");
-  const [form, setForm] = useState({ business: "", contact: "", phone: "", email: "", location: "", areas: "", years: "", cac: "", bio: "" });
+  const [form, setForm] = useState({ business: "", contact: "", phone: "", email: "", location: "", areas: "", years: "", cac: "", bio: "", password: "" });
   const [tags, setTags] = useState<string[]>([]);
   const [rows, setRows] = useState<ProdRow[]>([{ ...EMPTY_ROW }]);
   const [agree, setAgree] = useState(false);
@@ -26,7 +28,7 @@ export default function Join() {
   const toggleTag = (t: string) => setTags(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
   const tagOptions = role === "pro" ? [...PRO_TRADES] : [...SELLER_CATEGORIES];
 
-  const submit = () => {
+  const submit = async () => {
     if (form.business.trim().length < 2) return toast.error("Enter your business name");
     if (form.contact.trim().length < 2) return toast.error("Enter a contact person name");
     if (form.phone.replace(/\D/g, "").length < 10) return toast.error("Enter a valid phone / WhatsApp number (at least 10 digits)");
@@ -45,7 +47,14 @@ export default function Join() {
       status: "pending", verified: false, featured: false,
       createdAt: new Date().toISOString(),
     };
-    addPartner(partner);
+    await addPartnerAsync(partner);
+    // Phase 5: when the backend is live and the partner chose a password,
+    // also create their login (attached to this partner code) so
+    // /partner-status and /account work with real credentials.
+    if (form.password && form.password.length >= 8 && form.email.trim() && (await probeApi())) {
+      try { await registerAccount({ name: form.contact.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password, partnerCode: partner.code }); }
+      catch { /* account is a bonus — the application itself is saved */ }
+    }
     setCreated(partner);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -100,6 +109,7 @@ export default function Join() {
               <div><label className="label-tech" htmlFor="j-years">Years of experience</label><input id="j-years" inputMode="numeric" className="field-tech" value={form.years} onChange={e => setForm({ ...form, years: e.target.value })} placeholder="e.g. 8" /></div>
               <div><label className="label-tech" htmlFor="j-cac">CAC number (optional)</label><input id="j-cac" className="field-tech" value={form.cac} onChange={e => setForm({ ...form, cac: e.target.value })} placeholder="RC number if registered" /></div>
             </>)}
+            <div><label className="label-tech" htmlFor="j-password">Account password (optional)</label><input id="j-password" type="password" className="field-tech" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="8+ characters — for partner login" /><p className="font-tech text-[10px] text-muted-foreground mt-1">Set a password (with an email above) to create a partner login when our backend is live. You can always use your partner code instead.</p></div>
             <div className="sm:col-span-2"><label className="label-tech" htmlFor="j-bio">About your business</label><textarea id="j-bio" rows={3} className="field-tech resize-none" value={form.bio} onChange={e => setForm({ ...form, bio: e.target.value })} placeholder="What you do, typical jobs, why customers should pick you…" /></div>
           </div>
         </div>

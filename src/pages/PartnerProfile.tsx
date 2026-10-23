@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, BadgeCheck, MapPin, MessageCircle, Star, ShieldCheck } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { findPartner, addLead, waDigits } from "@/lib/partnerStorage";
+import { findPartner, findPartnerAsync, addLeadAsync, waDigits, type Partner } from "@/lib/partnerStorage";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink, getBusiness } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { toast } from "sonner";
 export default function PartnerProfile() {
   const TERMS = getPartnerTerms();
   const { code } = useParams<{ code: string }>();
-  const partner = code ? findPartner(code) : undefined;
+  const [partner, setPartner] = useState<Partner | undefined>(() => (code ? findPartner(code) : undefined));
+  useEffect(() => { let on = true; if (code) findPartnerAsync(code).then(p => { if (on && p) setPartner(p); }); return () => { on = false; }; }, [code]);
   const [form, setForm] = useState({ name: "", phone: "", desc: "", value: "" });
   const [leadRef, setLeadRef] = useState<string | null>(null);
 
@@ -23,12 +24,12 @@ export default function PartnerProfile() {
   const waOrder = (productName: string, price: number, unit: string) =>
     `https://wa.me/${waDigits(partner.phone)}?text=${encodeURIComponent(`Hello ${partner.businessName}, I'd like to order via the Oketex Partner Network:\n\n${productName} — ${formatNGN(price)} ${unit}\n\n(Shared from oketex network listing ${partner.code})`)}`;
 
-  const submitLead = () => {
+  const submitLead = async () => {
     if (form.name.trim().length < 2) return toast.error("Enter your full name");
     if (form.phone.replace(/\D/g, "").length < 10) return toast.error("Enter a valid phone number (at least 10 digits)");
     if (form.desc.trim().length < 5) return toast.error(`Describe the ${isSeller ? "supply request" : "job"}`);
     const est = Math.max(0, parseInt(form.value.replace(/\D/g, ""), 10) || 0);
-    const lead = addLead({ partnerCode: partner.code, partnerName: partner.businessName, type: isSeller ? "supply" : "job", customerName: form.name.trim(), customerPhone: form.phone.trim(), description: form.desc.trim(), estValueNgn: est });
+    const lead = await addLeadAsync({ partnerCode: partner.code, partnerName: partner.businessName, type: isSeller ? "supply" : "job", customerName: form.name.trim(), customerPhone: form.phone.trim(), description: form.desc.trim(), estValueNgn: est });
     setLeadRef(lead.id);
   };
 

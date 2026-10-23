@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
-import { Menu, Phone, ShoppingCart } from "lucide-react";
+import { Menu, Phone, ShoppingCart, UserRound } from "lucide-react";
+import { useAuthUser } from "@/lib/auth";
 import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink } from "@/lib/settings";
 import { useCart } from "@/lib/cart";
@@ -32,6 +33,7 @@ export function LogoMark({ className }: { className?: string }) {
 const MARQUEE_ITEMS = ["FREE SITE MEASUREMENT WITHIN OGUN & LAGOS","50-YEAR WARRANTY ON STONE-COATED TILES","SAME-DAY CUTTING ON LONGSPAN ORDERS","NATIONWIDE DELIVERY","0.45MM · 0.50MM · 0.55MM FULL GAUGE IN STOCK"];
 export function SiteHeader() {
   const { count, openCart } = useCart();
+  const authUser = useAuthUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 no-print">
@@ -43,6 +45,7 @@ export function SiteHeader() {
         <div className="ml-auto flex items-center gap-2">
           <a href={`tel:${getBusiness().phone.replace(/\s/g,"")}`} className="hidden xl:flex items-center gap-2 font-tech text-xs text-muted-foreground hover:text-primary mr-2"><Phone className="h-3.5 w-3.5" />{getBusiness().phone}</a>
           <Button variant="ghost" size="icon" className="relative hover:text-primary" onClick={openCart} aria-label="Open cart"><ShoppingCart className="h-5 w-5" />{count>0 && <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground font-tech text-[10px] h-4 min-w-4 px-1 flex items-center justify-center">{count}</span>}</Button>
+          {authUser ? <Link to="/account" className="hidden sm:inline-flex items-center gap-1.5 border hairline px-3 py-2 font-display uppercase tracking-wider text-xs text-primary"><UserRound className="h-3.5 w-3.5" />{authUser.name.split(" ")[0]}</Link> : <Link to="/account" className="hidden sm:inline-flex border hairline px-3 py-2 font-display uppercase tracking-wider text-xs hover:text-primary">Sign in</Link>}
           <Link to="/admin" className="hidden sm:inline-flex border hairline px-3 py-2 font-display uppercase tracking-wider text-xs hover:text-primary">Admin</Link>
         </div>
       </div></div>

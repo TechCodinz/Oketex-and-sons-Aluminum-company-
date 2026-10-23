@@ -6,7 +6,7 @@ import { PageHead } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink } from "@/lib/settings";
-import { BOOKING_SERVICES, bookingCode, saveBooking } from "@/lib/proStorage";
+import { BOOKING_SERVICES, bookingCode, saveBookingAsync } from "@/lib/proStorage";
 
 const SLOTS = ["Morning 8–11", "Midday 11–2", "Afternoon 2–5"] as const;
 const BUILDING_TYPES = ["Bungalow", "Duplex", "Storey Building", "Commercial", "Warehouse", "Church"] as const;
@@ -24,14 +24,14 @@ export default function Book() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
   const serviceLabel = BOOKING_SERVICES.find(s => s.id === form.service)?.label ?? form.service;
 
-  function submit() {
+  async function submit() {
     if (form.name.trim().length < 2) return toast.error("Enter your full name");
     if (form.phone.replace(/\D/g, "").length < 10) return toast.error("Enter a valid Nigerian phone / WhatsApp number (at least 10 digits)");
     if (!form.date) return toast.error("Pick a preferred date");
     if (form.date < today) return toast.error("Date cannot be in the past");
     if (form.address.trim().length < 5) return toast.error("Enter the site address");
     const code = bookingCode();
-    saveBooking({
+    await saveBookingAsync({
       code, service: form.service, serviceLabel, date: form.date, slot: form.slot, name: form.name.trim(),
       phone: form.phone.trim(), address: form.address.trim(), lgaState: form.lgaState.trim(),
       buildingType: form.buildingType, stage: form.stage, notes: form.notes.trim() || undefined,

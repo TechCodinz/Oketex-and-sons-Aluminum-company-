@@ -119,3 +119,59 @@ Visual identity preserved: dark `#212121` theme, primary orange `#FF6026`, Rajdh
 - Snap-Measure sends Roof Width as calculator length and derives width as 2× slope length as a starting point (explained in its UI); pitch still needs setting in the calculator. It is honest assisted measurement, not AI.
 - Window Pricer glass/finish multipliers are labelled estimates anchored to the catalog casement baseline (₦145,000 per 1.44m²).
 - `npm run build` (tsc + vite) passes clean. Deploy: any static host / Vercel with root `oketex-enhanced/app`, build `npm run build`, output `dist`. SPA fallback rewrite to `index.html` is needed on the host for deep links.
+
+---
+
+# Phase 5 — Production Backend (Neon + Auth + Paystack), 2026-10-23
+
+The site now ships a real backend that **activates only when env vars exist**. With no env vars, every API call fails soft and the app behaves exactly as the Phase 1–4 demo (all localStorage paths are intact — nothing was deleted). The frontend decides LIVE vs DEMO by probing `GET /api/health` once per load: LIVE only when the database answers (`health.db === true`); the flag is cached in localStorage key `oketex-api-live` and every store wrapper tries the API first, falling back to the local implementation on ANY error.
+
+## Architecture
+- **API**: plain Vercel Node functions, one file per route under repo-root `/api` (req/res style, tiny helpers in `server/http.ts`). Shared code in `/server` (never routes; Vercel bundles the imports): `db.ts`, `auth.ts`, `paystack.ts`, `schema.sql.ts`, `records.ts` (row→frontend-shape mappers), `siteSettings.ts`, `http.ts`.
+- **DB access**: `server/db.ts` exposes parameterised `dbQuery()` + `dbPing()` + a drizzle instance. Driver is chosen lazily from `DATABASE_URL`: Neon hosts → `@neondatabase/serverless` HTTP + `drizzle-orm/neon-http`; any other `postgres://` URL → `pg` Pool + `drizzle-orm/node-postgres` (this is also what lets the smoke tests exercise the real SQL). No `DATABASE_URL` → `isDbConfigured()` false, every endpoint degrades gracefully (below).
+- **tsconfig**: `api/` and `server/` live OUTSIDE `src`, so the app build (`tsc -b && vite build`) does not type-check them and stays green; they are plain TS with pragmatic `any` types, bundled by Vercel/esbuild at deploy and by the smoke harness locally.
+
+## Schema (applied by POST /api/setup — 13 statements, all IF NOT EXISTS)
+Tables: `users` (id serial, name, email unique, phone, password_hash, role customer|partner|admin, partner_code), `partners` (core columns + `data` jsonb holding the full frontend Partner record), `leads`, `bookings`, `orders` (`items` jsonb, `paid` flag), `quotes`, `payments` (reference unique, purpose, ref_id, amount_kobo, status), `settings` (key/value jsonb; the site document lives under key `site`), `offers`. Wide/volatile shapes (partner record, order items) are jsonb by design; money/status fields that the business queries on are real columns.
+
+## Endpoints
+- `GET /api/health` → `{ok, db, auth, payments, ts}` — the frontend's LIVE gate and the post-deploy check.
+- `POST /api/setup` — header `x-setup-secret` must equal env `SETUP_SECRET`; applies the DDL idempotently; this is the production bootstrap (no shell DB access needed).
+- Auth: `POST /api/auth/register` (bcryptjs cost 10; duplicate email → 409), `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` (401 `{user:null}` when signed out). Session = `jose` JWT (7 days) in httpOnly cookie `oketex_session`, secret env `AUTH_SECRET`. **Admin bootstrap**: env `ADMIN_EMAIL` + `ADMIN_PASSWORD` log in as admin with no users row.
+- `GET /api/partners` (approved only) · `POST /api/partners` (→ pending) · `GET /api/partners/[code]` (full record by code = the partner's capability credential).
+- `GET|PATCH /api/admin/partners` (admin session only) — list all; approve/reject, verified, featured flags.
+- `POST /api/leads` (public; **commission % snapshotted server-side** from effective terms) · `GET /api/leads?partnerCode=` or admin-all · `PATCH/DELETE` admin.
+- `POST /api/bookings`, `GET ?code=|?phone=` (phone match on last 10 digits), admin list + `PATCH` status. Same pattern for `POST /api/orders` + lookups; `POST /api/quotes` + admin list.
+- `GET /api/settings` → `{live:false}` when no DB, else the stored document (or null). `PUT /api/settings` (admin) upserts key `site`. Resolution order everywhere: **server settings → local admin override → code defaults** (`src/lib/settings.ts` merges a cached server copy over the local doc per-field; the roof engine, terms and business details all read the merged result).
+- `GET /api/offers` (public) · `POST/DELETE` (admin).
+- Payments (Paystack, **fail-closed**): `POST /api/payments/initialize {email, amountNgn≥50, purpose, refId}` → no `PAYSTACK_SECRET_KEY` ⇒ `{enabled:false}` and the UI keeps the WhatsApp flow; else creates a `pending` payment row and returns `authorizationUrl` + `reference` (default callback `<origin>/payment/return`). `GET /api/payments/verify?reference=` → asks Paystack, **amount must match the stored row** before any effect. `POST /api/payments/webhook` (`bodyParser:false`; verifies `x-paystack-signature` = HMAC-SHA512 hex of the RAW body, timing-safe; amount match enforced; effects are idempotent): `partner_verification` → `partners.verified=true`; `partner_featured` → `featured=true, featured_until=now()+30d`; `order` → `orders.paid=true`; `booking_deposit` → `bookings.deposit_paid=true`. Money effects happen ONLY on these two verified paths — never on the browser's say-so.
+
+## Frontend migration (API-first, demo fallback — localStorage code NOT deleted)
+- `src/lib/api.ts`: `probeApi()` health gate, `apiFetch` (cookies included), `useApiLive()`, `paymentsApi`.
+- `src/lib/auth.ts`: session client (the JWT never touches JS — httpOnly cookie only) + `useAuthUser()`.
+- Async wrappers beside the sync stores: `storage.ts` (`saveOrderAsync`, `findOrdersAsync` merges server+local deduped by code, quotes…), `proStorage.ts` (bookings), `partnerStorage.ts` (partners, leads, offers), `settings.ts` (`fetchServerSettings`, `saveSettingsAsync` PUTs the full effective doc so saving one group never wipes another).
+- Pages: `/account` is real login/register when live (demo explainer + device lists otherwise; signed-in users also pull their phone's server orders/bookings); header shows the account name / Sign-in; `/join` gained an optional password → creates the partner's login attached to their code; `/partner-status` looks up via API and its upgrade cards have **Pay with Paystack** beside WhatsApp; checkout has **Pay now with Paystack** (redirects only when the server says enabled); new `/payment/return` page verifies the reference server-side and shows the outcome; `/track` merges server results and shows "Paid online via Paystack ✓".
+- **Admin**: LIVE/DEMO badge from `/api/health`. LIVE → email+password sign-in via `/api/auth` (bootstrap admin or admin-role user; the demo `sessionStorage` flag alone no longer suffices — mount re-verifies `role==="admin"` via `/auth/me`), all tabs hydrate through the async wrappers (server data), settings saves PUT to the server. DEMO → the exact old `admin123` gate and local data.
+
+## ENV CHECKLIST (Vercel project → Settings → Environment Variables)
+| Var | Purpose | While missing |
+|---|---|---|
+| `DATABASE_URL` | Neon (or any Postgres) connection string | Whole backend inert: health `db:false`, site runs 100% demo |
+| `AUTH_SECRET` | JWT signing (≥16 chars, long random) | `auth:false` in health; logins can't issue sessions |
+| `SETUP_SECRET` | Guards `POST /api/setup` | Setup endpoint refuses all calls (safe) |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin login | No bootstrap admin; only users-table admins (none until one is promoted in SQL) |
+| `PAYSTACK_SECRET_KEY` | Server-side Paystack (use `sk_test_…` first) | Payments `{enabled:false}`; WhatsApp flow everywhere, nothing breaks |
+| `PAYSTACK_PUBLIC_KEY` | Reserved for future inline checkout | Unused by the current redirect flow |
+
+## Go-live runbook
+1. Create a Neon project → copy the pooled `DATABASE_URL`. Set all env vars above in Vercel (Production), redeploy.
+2. **POST-DEPLOY CHECK #1**: `curl https://oketex-and-sons-aluminum-company.vercel.app/api/health` must return **JSON** (`{"ok":true,"db":false,...}` before the DB var, `"db":true` after). If it returns `index.html`, the SPA rewrite swallowed the function — stop and fix routing before anything else. (Current `vercel.json` was left unchanged on purpose: Vercel serves `/api` functions with filesystem precedence over rewrites, and the existing fallback already excludes `api/` via its negative lookahead — the live site's deep links depend on that structure.)
+3. Bootstrap schema: `curl -X POST …/api/setup -H "x-setup-secret: <SETUP_SECRET>"` → `{ok:true, statementsApplied:13}`.
+4. Sign in at `/admin` with `ADMIN_EMAIL`/`ADMIN_PASSWORD` → badge must read **Mode: LIVE (database)**.
+5. Paystack: start with **TEST keys** from the business's Paystack dashboard (Settings → API Keys & Webhooks); register the webhook URL **`https://oketex-and-sons-aluminum-company.vercel.app/api/payments/webhook`**; run a ₦100 test payment from a partner upgrade card and confirm the badge activates via `/payment/return` + dashboard. Switch to live keys only after that passes. Amounts are verified against the stored payment row on both verify and webhook paths, so a tampered callback cannot apply effects.
+
+## Verification (this sandbox — no real Neon/Paystack reachable)
+- `npm run build` green (tsc + vite).
+- `npm run test:api` — **41 checks, all passing**. esbuild bundles the REAL handlers/server libs with only `server/db` swapped for a pg-mem-backed mock (same SQL, in-memory Postgres): schema applies (13 statements, 9 tables), health flags, register/login/cookie/duplicate-409/wrong-password-401, JWT round-trip + tamper rejection, bcrypt verify, admin bootstrap, partner pending→approve→public flow with non-admin gates, lead snapshots at default 5% then at admin-PUT 9%, orders/bookings/quotes round-trips (incl. phone lookup), payments fail-closed, webhook HMAC accept/reject, verification effect applied, replay-safe, amount-mismatch blocked. Honest gaps: pg-mem can't re-apply `CREATE TABLE IF NOT EXISTS` over tables with literal defaults (real Postgres treats it as a no-op — idempotency asserted via table-existence instead), and pg-mem lacks the 4-arg `regexp_replace` so the mock registers a faithful JS equivalent (production SQL unchanged).
+- **Still unverifiable until production env exists**: the live Neon HTTP transport end-to-end, Paystack's live initialize/verify round-trip against api.paystack.co, cookie behaviour on the real domain, and the `/api/health`-returns-JSON check — all covered by the runbook above.
+- Demo-fallback proof: the built bundle contains the `/api/health` probe, the `oketex-api-live` cache flag and both mode badges; with no env the probe fails → `live=false` → every wrapper uses the untouched localStorage implementations (Phases 1–4 behaviour byte-for-byte the fallback path).

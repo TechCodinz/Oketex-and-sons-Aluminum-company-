@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { Link } from "react-router";
-import { BadgeCheck, Inbox, MessageCircle, Package, Search, Star } from "lucide-react";
+import { BadgeCheck, CreditCard, Inbox, MessageCircle, Package, Search, Star } from "lucide-react";
 import { PageHead, StatusBadge } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { findPartner, leadsForPartner, offersForRole } from "@/lib/partnerStorage";
+import { findPartnerAsync, getLeadsForPartnerAsync, getOffersAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
+import { paymentsApi } from "@/lib/api";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
@@ -12,9 +14,32 @@ export default function PartnerStatus() {
   const TERMS = getPartnerTerms();
   const [code, setCode] = useState("");
   const [searched, setSearched] = useState("");
-  const partner = searched ? findPartner(searched) : undefined;
-  const leads = partner ? leadsForPartner(partner.code) : [];
-  const offers = partner && partner.status === "approved" ? offersForRole(partner.role) : [];
+  const [partner, setPartner] = useState<Partner | undefined>(undefined);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [payEmail, setPayEmail] = useState("");
+  // API-first lookup (server record when the backend is live, local otherwise).
+  const lookup = async (c: string) => {
+    setSearched(c);
+    const p = c.trim() ? await findPartnerAsync(c) : undefined;
+    setPartner(p);
+    if (!p) { setLeads([]); setOffers([]); return; }
+    setLeads(await getLeadsForPartnerAsync(p.code));
+    if (p.status === "approved") {
+      const all = await getOffersAsync();
+      const want = p.role === "pro" ? "pros" : "sellers";
+      setOffers(all.filter(o => o.audience === "all" || o.audience === want));
+    } else setOffers([]);
+  };
+  const payUpgrade = async (purpose: "partner_verification" | "partner_featured", amountNgn: number) => {
+    if (!partner) return;
+    const email = (partner.email || payEmail).trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error("Enter your email below first — Paystack sends the receipt there."); return; }
+    const init = await paymentsApi.initialize({ email, amountNgn, purpose, refId: partner.code });
+    if (init.enabled && init.authorizationUrl) { window.location.href = init.authorizationUrl; return; }
+    if (init.enabled) toast.error(init.error || "Payment could not start — try WhatsApp activation.");
+    else toast.message("Online payment isn't enabled yet — use WhatsApp activation below.");
+  };
 
   const upgradeWa = (kind: "Verified badge" | "Featured placement", fee: string) =>
     businessWaLink(`Hello Oketex, I want to activate an upgrade on the Partner Network.\n\nBusiness: ${partner?.businessName}\nPartner code: ${partner?.code}\nUpgrade: ${kind} (${fee})\n\nPlease confirm payment details.`);
@@ -23,8 +48,8 @@ export default function PartnerStatus() {
     <PageHead kicker="Partner Network" title="Partner Status & Dashboard" lead="Enter your partner code (PRT-…) to see your approval status, the leads Oketex has sent you, supply offers, and upgrade options." />
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
       <div className="flex gap-3 max-w-xl">
-        <input value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && setSearched(code)} placeholder="PRT-2026-XXXXX" className="field-tech font-tech uppercase" aria-label="Partner code" />
-        <Button className="rounded-none font-display uppercase shrink-0 h-12" onClick={() => setSearched(code)}><Search className="h-4 w-4 mr-2" /> Look up</Button>
+        <input value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && void lookup(code)} placeholder="PRT-2026-XXXXX" className="field-tech font-tech uppercase" aria-label="Partner code" />
+        <Button className="rounded-none font-display uppercase shrink-0 h-12" onClick={() => void lookup(code)}><Search className="h-4 w-4 mr-2" /> Look up</Button>
       </div>
 
       {searched && !partner && <div className="border hairline py-14 text-center mt-8"><p className="font-tech text-sm uppercase tracking-widest text-muted-foreground">No partner found with that code — check it and try again, or <Link to="/join" className="text-primary">register here</Link>.</p></div>}
@@ -91,8 +116,8 @@ export default function PartnerStatus() {
                   <p className="font-display font-bold text-3xl text-primary mt-1">{formatNGN(TERMS.verificationFeeNgn)} <span className="font-tech text-xs text-muted-foreground font-normal">one-time</span></p>
                   <p className="text-sm text-muted-foreground mt-2">Identity & business checks by Oketex, a Verified badge on your listing and a trust lift with customers.</p>
                   {partner.verified ? <p className="font-tech text-xs text-primary mt-4 uppercase tracking-widest">Active on your listing ✓</p>
-                    : <a href={upgradeWa("Verified badge", `${formatNGN(TERMS.verificationFeeNgn)} one-time`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-4 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90"><MessageCircle className="h-4 w-4" /> Activate via WhatsApp</a>}
-                  <p className="font-tech text-[10px] text-muted-foreground mt-3">Demo mode: payment is arranged on WhatsApp and the Oketex admin activates the badge after confirmation.</p>
+                    : <div className="mt-4 flex flex-wrap gap-2">{!partner.email && <input value={payEmail} onChange={e => setPayEmail(e.target.value)} placeholder="Your email for the receipt" className="field-tech !w-56" aria-label="Email for payment receipt" />}<button onClick={() => void payUpgrade("partner_verification", TERMS.verificationFeeNgn)} className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 cursor-pointer hover:bg-primary/90"><CreditCard className="h-4 w-4" /> Pay with Paystack</button><a href={upgradeWa("Verified badge", `${formatNGN(TERMS.verificationFeeNgn)} one-time`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 border hairline font-display font-semibold uppercase tracking-wider px-5 h-11 hover:text-primary"><MessageCircle className="h-4 w-4" /> Or WhatsApp</a></div>}
+                  <p className="font-tech text-[10px] text-muted-foreground mt-3">Pay online with Paystack when enabled — the badge activates automatically on payment. Otherwise arrange on WhatsApp and the Oketex admin activates it after confirmation.</p>
                 </div>
                 <div className="border hairline bg-card p-6">
                   <Star className="h-8 w-8 text-primary" />
@@ -100,8 +125,8 @@ export default function PartnerStatus() {
                   <p className="font-display font-bold text-3xl text-primary mt-1">{formatNGN(TERMS.featuredFeeNgn)} <span className="font-tech text-xs text-muted-foreground font-normal">/ month</span></p>
                   <p className="text-sm text-muted-foreground mt-2">Featured ribbon on your card and first position in the directory while active — more eyes, more leads.</p>
                   {partner.featured ? <p className="font-tech text-xs text-primary mt-4 uppercase tracking-widest">Active on your listing ✓</p>
-                    : <a href={upgradeWa("Featured placement", `${formatNGN(TERMS.featuredFeeNgn)} per month`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-4 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90"><MessageCircle className="h-4 w-4" /> Activate via WhatsApp</a>}
-                  <p className="font-tech text-[10px] text-muted-foreground mt-3">Demo mode: payment is arranged on WhatsApp and the Oketex admin activates the placement after confirmation.</p>
+                    : <div className="mt-4 flex flex-wrap gap-2">{!partner.email && <input value={payEmail} onChange={e => setPayEmail(e.target.value)} placeholder="Your email for the receipt" className="field-tech !w-56" aria-label="Email for payment receipt" />}<button onClick={() => void payUpgrade("partner_featured", TERMS.featuredFeeNgn)} className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 cursor-pointer hover:bg-primary/90"><CreditCard className="h-4 w-4" /> Pay with Paystack</button><a href={upgradeWa("Featured placement", `${formatNGN(TERMS.featuredFeeNgn)} per month`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 border hairline font-display font-semibold uppercase tracking-wider px-5 h-11 hover:text-primary"><MessageCircle className="h-4 w-4" /> Or WhatsApp</a></div>}
+                  <p className="font-tech text-[10px] text-muted-foreground mt-3">Pay online with Paystack when enabled — placement activates automatically on payment. Otherwise arrange on WhatsApp and the Oketex admin activates it after confirmation.</p>
                 </div>
               </div>
             </section>

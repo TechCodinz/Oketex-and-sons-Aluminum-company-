@@ -1,4 +1,7 @@
 import { Routes, Route } from "react-router";
+import { useEffect } from "react";
+import { probeApi } from "@/lib/api";
+import { fetchServerSettings } from "@/lib/settings";
 import { SiteShell } from "@/components/SiteShell";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
@@ -23,7 +26,11 @@ import Partners from "./pages/Partners";
 import PartnerProfile from "./pages/PartnerProfile";
 import Join from "./pages/Join";
 import PartnerStatus from "./pages/PartnerStatus";
+import PaymentReturn from "./pages/PaymentReturn";
 export default function App(){
+ // Phase 5: probe the backend once; when live, pull the server settings
+ // document so admin-set rates/terms/business details win site-wide.
+ useEffect(() => { probeApi().then(live => { if (live) void fetchServerSettings(); }); }, []);
  return (<SiteShell><Routes>
   <Route path="/" element={<Home />} />
   <Route path="/shop" element={<Shop />} />
@@ -48,6 +55,7 @@ export default function App(){
   <Route path="/account" element={<Account />} />
   <Route path="/admin" element={<Admin />} />
   <Route path="/login" element={<Account />} />
+  <Route path="/payment/return" element={<PaymentReturn />} />
   <Route path="*" element={<NotFound />} />
  </Routes></SiteShell>);
 }

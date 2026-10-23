@@ -151,3 +151,90 @@ export function offersForRole(role: PartnerRole): Offer[] {
   const want = role === "pro" ? "pros" : "sellers";
   return getOffers().filter(o => o.audience === "all" || o.audience === want);
 }
+
+// ---------------- Phase 5: API-first wrappers (demo fallback) ----------------
+import { apiFetch, probeApi } from "./api";
+/** Public directory list: server (approved only) when live, else local. */
+export async function getPartnersAsync(): Promise<Partner[]> {
+  if (await probeApi()) {
+    try { const { partners } = await apiFetch<{ partners: Partner[] }>("/api/partners"); return partners; }
+    catch { /* fall through */ }
+  }
+  return getPartners().filter(p => p.status === "approved");
+}
+/** Admin list (all statuses incl. pending). Requires an admin session when live. */
+export async function getPartnersAdminAsync(): Promise<Partner[]> {
+  if (await probeApi()) {
+    try { const { partners } = await apiFetch<{ partners: Partner[] }>("/api/admin/partners"); return partners; }
+    catch { /* fall through */ }
+  }
+  return getPartners();
+}
+export async function findPartnerAsync(code: string): Promise<Partner | undefined> {
+  if (await probeApi()) {
+    try { const { partner } = await apiFetch<{ partner: Partner }>(`/api/partners/${encodeURIComponent(code.trim().toUpperCase())}`); return partner; }
+    catch { /* fall through (incl. server 404) */ }
+  }
+  return findPartner(code);
+}
+export async function addPartnerAsync(p: Partner): Promise<void> {
+  if (await probeApi()) {
+    try { await apiFetch("/api/partners", { method: "POST", body: JSON.stringify(p) }); return; }
+    catch { /* fall back to local so the application is never lost */ }
+  }
+  addPartner(p);
+}
+export async function updatePartnerAsync(code: string, patch: Partial<Partner>): Promise<void> {
+  updatePartner(code, patch);
+  if (await probeApi()) {
+    try { await apiFetch("/api/admin/partners", { method: "PATCH", body: JSON.stringify({ code, status: patch.status, verified: patch.verified, featured: patch.featured }) }); }
+    catch { /* local stands */ }
+  }
+}
+export async function getLeadsAsync(): Promise<Lead[]> {
+  if (await probeApi()) {
+    try { const { leads } = await apiFetch<{ leads: Lead[] }>("/api/leads"); return leads; }
+    catch { /* fall through */ }
+  }
+  return getLeads();
+}
+export async function getLeadsForPartnerAsync(code: string): Promise<Lead[]> {
+  if (await probeApi()) {
+    try { const { leads } = await apiFetch<{ leads: Lead[] }>(`/api/leads?partnerCode=${encodeURIComponent(code.trim().toUpperCase())}`); return leads; }
+    catch { /* fall through */ }
+  }
+  return leadsForPartner(code);
+}
+export async function addLeadAsync(input: Omit<Lead, "id" | "commissionPct" | "commissionNgn" | "status" | "createdAt">): Promise<Lead> {
+  if (await probeApi()) {
+    try { const { lead } = await apiFetch<{ lead: Lead }>("/api/leads", { method: "POST", body: JSON.stringify(input) }); return lead; }
+    catch { /* fall back to local */ }
+  }
+  return addLead(input);
+}
+export async function updateLeadStatusAsync(id: string, status: LeadStatus): Promise<void> {
+  updateLeadStatus(id, status);
+  if (await probeApi()) { try { await apiFetch("/api/leads", { method: "PATCH", body: JSON.stringify({ id, status }) }); } catch { /* local stands */ } }
+}
+export async function deleteLeadAsync(id: string): Promise<void> {
+  deleteLead(id);
+  if (await probeApi()) { try { await apiFetch(`/api/leads?id=${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* local stands */ } }
+}
+export async function getOffersAsync(): Promise<Offer[]> {
+  if (await probeApi()) {
+    try { const { offers } = await apiFetch<{ offers: Offer[] }>("/api/offers"); return offers; }
+    catch { /* fall through */ }
+  }
+  return getOffers();
+}
+export async function addOfferAsync(o: Omit<Offer, "id" | "createdAt">): Promise<void> {
+  if (await probeApi()) {
+    try { await apiFetch("/api/offers", { method: "POST", body: JSON.stringify(o) }); return; }
+    catch { /* fall back to local */ }
+  }
+  addOffer(o);
+}
+export async function deleteOfferAsync(id: string): Promise<void> {
+  deleteOffer(id);
+  if (await probeApi()) { try { await apiFetch(`/api/offers?id=${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* local stands */ } }
+}

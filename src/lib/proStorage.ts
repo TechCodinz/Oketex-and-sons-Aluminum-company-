@@ -92,3 +92,38 @@ export const BOOKING_SERVICES = [
 const JOURNEY_KEY = "oketex-journey";
 export function getJourney(): Record<number, boolean> { try { const r = localStorage.getItem(JOURNEY_KEY); return r ? (JSON.parse(r) as Record<number, boolean>) : {}; } catch { return {}; } }
 export function saveJourney(j: Record<number, boolean>) { try { localStorage.setItem(JOURNEY_KEY, JSON.stringify(j)); } catch { /* ignore */ } }
+
+// ---------------- Phase 5: API-first wrappers (demo fallback) ----------------
+import { apiFetch, probeApi } from "./api";
+function dedupeByCode<T extends { code: string }>(...lists: T[][]): T[] {
+  const seen = new Set<string>(); const out: T[] = [];
+  for (const list of lists) for (const item of list) { const k = item.code.toUpperCase(); if (!seen.has(k)) { seen.add(k); out.push(item); } }
+  return out;
+}
+export async function saveBookingAsync(b: LocalBooking): Promise<void> {
+  saveBooking(b);
+  if (await probeApi()) { try { await apiFetch("/api/bookings", { method: "POST", body: JSON.stringify(b) }); } catch { /* local copy stands */ } }
+}
+export async function getBookingsAsync(): Promise<LocalBooking[]> {
+  if (await probeApi()) {
+    try { const { bookings } = await apiFetch<{ bookings: LocalBooking[] }>("/api/bookings"); return dedupeByCode(bookings, getBookings()); }
+    catch { /* fall through to local */ }
+  }
+  return getBookings();
+}
+export async function findBookingsAsync(q: string): Promise<LocalBooking[]> {
+  const local = findBooking(q);
+  if (await probeApi()) {
+    try {
+      const isCode = /^BK-/i.test(q.trim());
+      const path = isCode ? `/api/bookings?code=${encodeURIComponent(q.trim())}` : `/api/bookings?phone=${encodeURIComponent(q.trim())}`;
+      const { bookings } = await apiFetch<{ bookings: LocalBooking[] }>(path);
+      return dedupeByCode(bookings, local);
+    } catch { /* local only */ }
+  }
+  return local;
+}
+export async function updateBookingStatusAsync(code: string, status: BookingStatus): Promise<void> {
+  updateBookingStatus(code, status);
+  if (await probeApi()) { try { await apiFetch("/api/bookings", { method: "PATCH", body: JSON.stringify({ code, status }) }); } catch { /* local stands */ } }
+}

@@ -8,6 +8,7 @@
 // quotes) keep the values they snapshotted at creation.
 import { PARTNER_TERMS } from "@/data/partnerTerms";
 import { BUSINESS } from "@/contracts/constants";
+import { apiFetch, probeApi } from "./api";
 
 export interface EffectivePartnerTerms {
   referralCommissionPct: number; verificationFeeNgn: number; featuredFeeNgn: number; currencyNote: string;
@@ -35,8 +36,26 @@ export const DEFAULT_RATES: EffectiveRates = {
 };
 
 const KEY = "oketex-settings";
+const SERVER_KEY = "oketex-server-settings";
+function parseKey(k: string): OketexSettings {
+  try { const r = localStorage.getItem(k); return r ? (JSON.parse(r) as OketexSettings) : {}; } catch { return {}; }
+}
+/** Effective settings document: code defaults ← local admin override ←
+ *  SERVER settings (Phase 5). The server copy (when the API is live) wins
+ *  per-field so one admin change updates every visitor; the local override
+ *  remains the demo-mode path. */
 export function getSettings(): OketexSettings {
-  try { const r = localStorage.getItem(KEY); return r ? (JSON.parse(r) as OketexSettings) : {}; } catch { return {}; }
+  const local = parseKey(KEY);
+  const server = parseKey(SERVER_KEY);
+  if (!Object.keys(server).length) return local;
+  return {
+    partnerTerms: { ...local.partnerTerms, ...server.partnerTerms },
+    rates: {
+      ...local.rates, ...server.rates,
+      deliveryZones: { ...local.rates?.deliveryZones, ...server.rates?.deliveryZones },
+    },
+    business: { ...local.business, ...server.business },
+  };
 }
 export function saveSettings(patch: OketexSettings) {
   const next: OketexSettings = {
@@ -102,4 +121,43 @@ export function overrideSummary(): string[] {
   }
   if (s.business && Object.keys(s.business).length) out.push(`Business details: ${Object.keys(s.business).join(", ")}`);
   return out;
+}
+
+// ---------------- Phase 5: server-backed settings ----------------
+/** Pull the server settings document (GET /api/settings) into the local
+ *  cache. Called once on app start and after admin saves. No-op in demo. */
+export async function fetchServerSettings(): Promise<OketexSettings | null> {
+  if (!(await probeApi())) return null;
+  try {
+    const { live, settings } = await apiFetch<{ live: boolean; settings: OketexSettings | null }>("/api/settings");
+    if (!live) return null;
+    try {
+      if (settings) localStorage.setItem(SERVER_KEY, JSON.stringify(settings));
+      else localStorage.removeItem(SERVER_KEY);
+    } catch { /* ignore */ }
+    return settings;
+  } catch { return null; }
+}
+/** Save settings: always writes the local override (demo path); when the
+ *  API is live, also PUTs the full override document to the server so it
+ *  becomes effective for every visitor. */
+export async function saveSettingsAsync(patch: OketexSettings): Promise<{ live: boolean }> {
+  saveSettings(patch);
+  if (!(await probeApi())) return { live: false };
+  try {
+    // PUT the full EFFECTIVE override document (local merged with whatever
+    // the server already held) so saving one group never wipes another.
+    const doc = getSettings();
+    await apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(doc) });
+    await fetchServerSettings();
+    return { live: true };
+  } catch { return { live: false }; }
+}
+/** Reset: clears local overrides; when live, PUTs an empty document too. */
+export async function resetSettingsAsync(): Promise<void> {
+  resetSettings();
+  try { localStorage.removeItem(SERVER_KEY); } catch { /* ignore */ }
+  if (await probeApi()) {
+    try { await apiFetch("/api/settings", { method: "PUT", body: JSON.stringify({}) }); } catch { /* ignore */ }
+  }
 }

@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, BadgeCheck, MapPin, Search, Star } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { getPartners, type Partner } from "@/lib/partnerStorage";
+import { getPartners, getPartnersAsync, type Partner } from "@/lib/partnerStorage";
 import { PRO_TRADES, SELLER_CATEGORIES } from "@/data/partnerTerms";
 import { getPartnerTerms } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,8 @@ export default function Partners() {
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState("");
   const [loc, setLoc] = useState("");
-  const all = getPartners().filter(p => p.status === "approved");
+  const [all, setAll] = useState<Partner[]>(() => getPartners().filter(p => p.status === "approved"));
+  useEffect(() => { let on = true; getPartnersAsync().then(list => { if (on) setAll(list); }); return () => { on = false; }; }, []);
   const tagOptions = role === "pro" ? [...PRO_TRADES] : role === "seller" ? [...SELLER_CATEGORIES] : [...PRO_TRADES, ...SELLER_CATEGORIES];
   const list = useMemo(() => {
     const s = search.trim().toLowerCase(), l = loc.trim().toLowerCase();
