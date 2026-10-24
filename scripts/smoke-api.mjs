@@ -31,7 +31,7 @@ await build({
   plugins: [{ name: "db-mock", setup(b) {
     // Redirect EVERY import of the server db module ("../server/db",
     // "../../server/db" and "./db" from inside server/) to the pg-mem mock.
-    b.onResolve({ filter: /db$/ }, (args) => {
+    b.onResolve({ filter: /db(\.js)?$/ }, (args) => {
       if (/[/\\](server|api)[/\\]/.test(args.importer) || args.importer.endsWith("smoke-entry.ts")) {
         return { path: path.join(root, "scripts", "mock-db.mjs") };
       }

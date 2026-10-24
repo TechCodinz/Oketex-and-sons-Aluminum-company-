@@ -4,8 +4,8 @@
 // row exists (the /auth/me endpoint reflects the same bootstrap identity).
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
-import { parseCookies } from "./http";
-import { dbQuery } from "./db";
+import { parseCookies } from "./http.js";
+import { dbQuery } from "./db.js";
 
 export const SESSION_COOKIE = "oketex_session";
 const SESSION_DAYS = 7;

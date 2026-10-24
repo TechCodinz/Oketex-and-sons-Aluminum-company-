@@ -4,25 +4,25 @@
 // the Hobby build failed deterministically once the function count passed
 // ~12 (bisected on the deploy-test branch, 2026-10-24: 12 OK, 14 fail,
 // content-independent). One function traces the shared deps once.
-import { sendJson } from "./http";
-import health from "./handlers/health";
-import setup from "./handlers/setup";
-import register from "./handlers/auth/register";
-import login from "./handlers/auth/login";
-import logout from "./handlers/auth/logout";
-import me from "./handlers/auth/me";
-import partners from "./handlers/partners";
-import partnerByCode from "./handlers/partners/[code]";
-import adminPartners from "./handlers/admin/partners";
-import leads from "./handlers/leads";
-import bookings from "./handlers/bookings";
-import orders from "./handlers/orders";
-import quotes from "./handlers/quotes";
-import settings from "./handlers/settings";
-import offers from "./handlers/offers";
-import payInit from "./handlers/payments/initialize";
-import payVerify from "./handlers/payments/verify";
-import payWebhook from "./handlers/payments/webhook";
+import { sendJson } from "./http.js";
+import health from "./handlers/health.js";
+import setup from "./handlers/setup.js";
+import register from "./handlers/auth/register.js";
+import login from "./handlers/auth/login.js";
+import logout from "./handlers/auth/logout.js";
+import me from "./handlers/auth/me.js";
+import partners from "./handlers/partners.js";
+import partnerByCode from "./handlers/partners/[code].js";
+import adminPartners from "./handlers/admin/partners.js";
+import leads from "./handlers/leads.js";
+import bookings from "./handlers/bookings.js";
+import orders from "./handlers/orders.js";
+import quotes from "./handlers/quotes.js";
+import settings from "./handlers/settings.js";
+import offers from "./handlers/offers.js";
+import payInit from "./handlers/payments/initialize.js";
+import payVerify from "./handlers/payments/verify.js";
+import payWebhook from "./handlers/payments/webhook.js";
 
 const exact: Record<string, any> = {
   "/api/health": health,

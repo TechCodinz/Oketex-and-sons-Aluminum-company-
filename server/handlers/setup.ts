@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, wrap } from "../http";
-import { dbQuery, isDbConfigured } from "../db";
-import { SCHEMA_STATEMENTS } from "../schema.sql";
+import { sendJson, methodNotAllowed, wrap } from "../http.js";
+import { dbQuery, isDbConfigured } from "../db.js";
+import { SCHEMA_STATEMENTS } from "../schema.sql.js";
 // One-time (idempotent) production bootstrap: POST with header
 //   x-setup-secret: <SETUP_SECRET env>
 // applies all CREATE TABLE IF NOT EXISTS statements. Safe to re-run.

@@ -3,7 +3,7 @@
 // marked paid. Money effects are applied ONLY from the verify endpoint
 // (server-to-server check) or the webhook after its HMAC signature check.
 import crypto from "node:crypto";
-import { dbQuery } from "./db";
+import { dbQuery } from "./db.js";
 
 export function paystackEnabled(): boolean { return !!(process.env.PAYSTACK_SECRET_KEY || ""); }
 function secretKey(): string { return process.env.PAYSTACK_SECRET_KEY || ""; }

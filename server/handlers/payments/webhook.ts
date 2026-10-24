@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, readRawBody, wrap } from "../../http";
-import { dbQuery, isDbConfigured } from "../../db";
-import { paystackEnabled, verifyPaystackSignature, applyPaymentEffect } from "../../paystack";
+import { sendJson, methodNotAllowed, readRawBody, wrap } from "../../http.js";
+import { dbQuery, isDbConfigured } from "../../db.js";
+import { paystackEnabled, verifyPaystackSignature, applyPaymentEffect } from "../../paystack.js";
 // Paystack webhook. The signature header is verified against the RAW body
 // (HMAC-SHA512 with the secret key) — nothing is applied without it.
 // Register this URL in the Paystack dashboard:

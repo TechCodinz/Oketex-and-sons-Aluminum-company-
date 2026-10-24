@@ -1,7 +1,7 @@
 // Server-side copy of the site settings (settings table, key 'site').
 // The value shape mirrors src/lib/settings.ts OketexSettings exactly, so the
 // frontend can merge: server settings → local override → code defaults.
-import { dbQuery } from "./db";
+import { dbQuery } from "./db.js";
 
 // Mirror of src/data/partnerTerms.ts PARTNER_TERMS defaults — kept in sync
 // deliberately so lead commission snapshotting server-side matches the

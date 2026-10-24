@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
-import { dbQuery, isDbConfigured } from "../db";
-import { orderFromRow } from "../records";
-import { isAdmin } from "../auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
+import { dbQuery, isDbConfigured } from "../db.js";
+import { orderFromRow } from "../records.js";
+import { isAdmin } from "../auth.js";
 // POST (public) → place order (items snapshot as jsonb).
 // GET ?code= | ?phone= → lookups. GET (admin) → all. PATCH (admin) → {code, status?, paid?}.
 export default wrap(async (req: any, res: any) => {

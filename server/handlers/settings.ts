@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
-import { dbQuery, isDbConfigured } from "../db";
-import { isAdmin } from "../auth";
-import { getSiteSettings } from "../siteSettings";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
+import { dbQuery, isDbConfigured } from "../db.js";
+import { isAdmin } from "../auth.js";
+import { getSiteSettings } from "../siteSettings.js";
 // GET → public effective server settings, or {live:false} when there is no
 // DB / nothing stored. PUT (admin) → replace the 'site' settings document.
 // The stored shape mirrors src/lib/settings.ts OketexSettings.
