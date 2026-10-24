@@ -24,6 +24,7 @@ import {
   type EstimatorInput, type SavedEstimate,
 } from "@/lib/projectEstimator";
 import { getProProjects, saveProProjects, uid, type ProProject, type MeasureRow, type TakeOffRow } from "@/lib/proStorage";
+import AiAssistPanel from "@/components/AiAssistPanel";
 
 const TRADE_ICONS: Record<TradeId, typeof Hammer> = {
   roofing: Hammer, tiling: LayoutGrid, woodwork: Ruler, plumbing: Bath,
@@ -278,6 +279,7 @@ export default function Estimator() {
             </button>
           )}
           <p className="font-tech text-[11px] text-muted-foreground mt-3">The photo stays in this session only (it is never uploaded or stored) — it appears on your estimate so you remember the job at a glance. Saved estimates record only that a photo was attached.</p>
+          <div className="mt-5"><AiAssistPanel context="estimator" /></div>
           <div className="border hairline bg-primary/10 p-4 mt-5">
             <p className="text-sm">Don't know your measurements? <Link to="/snap-measure" className="text-primary font-semibold">Use Snap-Measure</Link> — photograph the building, calibrate with a door, and read real metres off the photo.</p>
           </div>
@@ -488,6 +490,7 @@ export default function Estimator() {
                 <p className="font-display font-bold text-2xl text-primary mt-3">{formatNGN(e.pricedTotal)}</p>
                 {e.unpricedCount > 0 && <p className="font-tech text-[11px] text-muted-foreground">+ {e.unpricedCount} item(s) to confirm price</p>}
                 <Button variant="outline" className="rounded-none font-display uppercase text-xs mt-4 w-full" onClick={() => loadSaved(e)}>Load estimate</Button>
+                <Link to={`/jobs?from=${e.code}`} className="block text-center font-tech text-[11px] text-primary mt-2 hover:underline">Post as a job for pros to bid →</Link>
               </div>
             ))}
           </div>

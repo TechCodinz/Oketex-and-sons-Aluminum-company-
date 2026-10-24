@@ -47,6 +47,39 @@ export function quoteFromRow(r: any): any {
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
   };
 }
+export function jobFromRow(r: any, opts: { publicSafe?: boolean } = {}): any {
+  // Public board/lookup responses never expose the customer's phone unless
+  // the caller proved it (matching phone lookup or an admin session).
+  return {
+    code: r.code, title: r.title, trade: r.trade, description: r.description, location: r.location,
+    budgetLow: Number(r.budget_low) || 0, budgetHigh: Number(r.budget_high) || 0,
+    customerName: r.customer_name, customerPhone: opts.publicSafe ? "" : r.customer_phone,
+    sourceQuoteCode: r.source_quote_code ?? undefined, status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+  };
+}
+export function bidFromRow(r: any): any {
+  return {
+    id: r.id, jobCode: r.job_code, partnerCode: r.partner_code, partnerName: r.partner_name,
+    amount: Number(r.amount) || 0, days: Number(r.days) || 0, note: r.note, status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+  };
+}
+export function reviewFromRow(r: any): any {
+  return {
+    id: r.id, partnerCode: r.partner_code, customerName: r.customer_name, rating: Number(r.rating) || 0,
+    text: r.text, refCode: r.ref_code, status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+  };
+}
+export function notificationFromRow(r: any): any {
+  return {
+    id: r.id, ts: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+    audience: r.audience, refCode: r.ref_code, channel: r.channel, templateKey: r.template_key,
+    message: r.message, status: r.status, phone: r.phone ?? undefined, email: r.email ?? undefined,
+    detail: r.detail ?? undefined,
+  };
+}
 export function offerFromRow(r: any): any {
   return {
     id: r.id, productName: r.product_name, priceNgn: Number(r.price_ngn) || 0, unit: r.unit,

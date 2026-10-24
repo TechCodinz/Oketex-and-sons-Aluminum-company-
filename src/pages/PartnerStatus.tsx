@@ -5,6 +5,7 @@ import { BadgeCheck, CreditCard, Inbox, MessageCircle, Package, Search, Star } f
 import { PageHead, StatusBadge } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
 import { findPartnerAsync, getLeadsForPartnerAsync, getOffersAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
+import { getJobsAsync, getPartnerBidsAsync, placeBidAsync, budgetLabel, type Job, type Bid } from "@/lib/jobs";
 import { paymentsApi } from "@/lib/api";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink } from "@/lib/settings";
@@ -17,19 +18,33 @@ export default function PartnerStatus() {
   const [partner, setPartner] = useState<Partner | undefined>(undefined);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [openJobs, setOpenJobs] = useState<Job[]>([]);
+  const [myBids, setMyBids] = useState<Bid[]>([]);
+  const [bidForms, setBidForms] = useState<Record<string, { amount: string; days: string; note: string }>>({});
   const [payEmail, setPayEmail] = useState("");
   // API-first lookup (server record when the backend is live, local otherwise).
   const lookup = async (c: string) => {
     setSearched(c);
     const p = c.trim() ? await findPartnerAsync(c) : undefined;
     setPartner(p);
-    if (!p) { setLeads([]); setOffers([]); return; }
+    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); return; }
     setLeads(await getLeadsForPartnerAsync(p.code));
     if (p.status === "approved") {
       const all = await getOffersAsync();
       const want = p.role === "pro" ? "pros" : "sellers";
       setOffers(all.filter(o => o.audience === "all" || o.audience === want));
-    } else setOffers([]);
+      setOpenJobs(await getJobsAsync());
+      setMyBids(await getPartnerBidsAsync(p.code));
+    } else { setOffers([]); setOpenJobs([]); setMyBids([]); }
+  };
+  const submitBid = async (job: Job) => {
+    if (!partner) return;
+    const f = bidForms[job.code] ?? { amount: "", days: "", note: "" };
+    const amount = parseFloat(f.amount) || 0;
+    if (amount <= 0) { toast.error("Enter your bid amount"); return; }
+    const bid = await placeBidAsync({ jobCode: job.code, partnerCode: partner.code, partnerName: partner.businessName, amount, days: parseInt(f.days) || 0, note: f.note.trim() });
+    setMyBids(await getPartnerBidsAsync(partner.code));
+    toast.success(`Bid placed on ${job.code} at ${formatNGN(bid.amount)} — the customer sees it in their tracking page`);
   };
   const payUpgrade = async (purpose: "partner_verification" | "partner_featured", amountNgn: number) => {
     if (!partner) return;
@@ -93,6 +108,24 @@ export default function PartnerStatus() {
                       <p className="font-tech text-[11px] text-muted-foreground">{new Date(l.createdAt).toLocaleString("en-NG")}{l.estValueNgn ? ` · Est. value ${formatNGN(l.estValueNgn)} · Commission ${l.commissionPct}% = ${formatNGN(l.commissionNgn)} (payable if won)` : ""}</p></div>
                     <StatusBadge status={l.status} />
                   </div>))}</div>}
+            </section>
+
+            <section>
+              <h3 className="font-display font-bold uppercase text-2xl mb-4">Jobs to bid ({openJobs.length} open)</h3>
+              {!openJobs.length ? <p className="font-tech text-sm text-muted-foreground border hairline p-5">No open jobs on the board right now. Customers post jobs from the <Link to="/jobs" className="text-primary">Jobs Board</Link> — check back soon.</p>
+                : <div className="space-y-4">{openJobs.map(j => { const mine = myBids.find(b => b.jobCode === j.code); const f = bidForms[j.code] ?? { amount: "", days: "", note: "" }; return (
+                  <div key={j.code} className="border hairline bg-card p-5">
+                    <div className="flex flex-wrap justify-between gap-3"><div><p className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground">{j.code} · {j.trade}</p><p className="font-display font-semibold uppercase mt-0.5">{j.title}</p><p className="text-sm text-muted-foreground mt-1 max-w-2xl">{j.description}</p><p className="font-tech text-[11px] text-muted-foreground mt-1">{j.location} · Budget {budgetLabel(j)}</p></div>
+                    {mine && <span className={`font-tech text-[10px] uppercase tracking-widest border px-2 py-1 h-fit ${mine.status === "Accepted" ? "border-emerald-500/60 text-emerald-400" : mine.status === "Rejected" ? "border-red-500/50 text-red-400" : "border-primary text-primary"}`}>Your bid: {formatNGN(mine.amount)} · {mine.status}</span>}</div>
+                    {mine?.status !== "Accepted" && (<div className="flex flex-wrap gap-3 mt-4 items-end">
+                      <div><label className="label-tech" htmlFor={`ba-${j.code}`}>Your price (₦)</label><input id={`ba-${j.code}`} inputMode="numeric" className="field-tech font-tech !w-40" placeholder="850,000" value={f.amount} onChange={e => setBidForms({ ...bidForms, [j.code]: { ...f, amount: e.target.value } })} /></div>
+                      <div><label className="label-tech" htmlFor={`bd-${j.code}`}>Days to finish</label><input id={`bd-${j.code}`} inputMode="numeric" className="field-tech font-tech !w-28" placeholder="14" value={f.days} onChange={e => setBidForms({ ...bidForms, [j.code]: { ...f, days: e.target.value } })} /></div>
+                      <div className="flex-1 min-w-44"><label className="label-tech" htmlFor={`bn-${j.code}`}>Note (optional)</label><input id={`bn-${j.code}`} className="field-tech font-tech" placeholder="Materials included, warranty…" value={f.note} onChange={e => setBidForms({ ...bidForms, [j.code]: { ...f, note: e.target.value } })} /></div>
+                      <Button className="rounded-none font-display uppercase h-11" onClick={() => void submitBid(j)}>{mine ? "Update bid" : "Place bid"}</Button>
+                    </div>)}
+                    {mine?.status === "Pending" && <p className="font-tech text-[10px] text-muted-foreground mt-2">You can update a pending bid any time — the customer only ever sees your latest price.</p>}
+                  </div>); })}</div>}
+              {myBids.length > 0 && <p className="font-tech text-[11px] text-muted-foreground mt-3">Your bid history: {myBids.map(b => `${b.jobCode} ${formatNGN(b.amount)} (${b.status})`).join(" · ")}</p>}
             </section>
 
             <section>

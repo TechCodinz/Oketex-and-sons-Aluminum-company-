@@ -21,12 +21,28 @@ export interface EffectiveRates {
 export interface EffectiveBusiness {
   name: string; shortName: string; phone: string; whatsapp: string; email: string; address: string; hours: string;
 }
+// ---- Phase 6: promotions + price watch (admin-editable, same merge) ----
+export interface Coupon {
+  code: string; kind: "percent" | "fixed"; value: number;
+  /** Minimum cart subtotal (₦) before the coupon applies. 0 = no minimum. */
+  minSpend: number; active: boolean; /** ISO date; empty/undefined = no expiry. */
+  expiresAt?: string;
+}
+export interface PromoBanner { text: string; active: boolean }
+export interface PricePoint { date: string; priceNgn: number; source: string }
+export interface PriceWatchMaterial { material: string; unit: string; points: PricePoint[] }
+
 export interface OketexSettings {
   /** Subscription plans (Deliverable F) — full array replaces defaults when set. PlanDef lives in lib/plans.ts. */
   plans?: import("./plans").PlanDef[];
   partnerTerms?: Partial<EffectivePartnerTerms>;
   rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number };
   business?: Partial<Pick<EffectiveBusiness, "phone" | "whatsapp" | "email" | "address" | "hours">>;
+  /** Phase 6 promotions: discount coupons + the site-wide promo banner. */
+  coupons?: Coupon[];
+  promoBanner?: PromoBanner;
+  /** Phase 6 price watch: admin-compiled market prices (starts EMPTY — no invented numbers). */
+  priceWatch?: PriceWatchMaterial[];
 }
 
 export const DELIVERY_ZONE_IDS = ["pickup", "ogun-lagos", "south-west", "ss-se", "abuja-north"] as const;
@@ -58,17 +74,24 @@ export function getSettings(): OketexSettings {
       deliveryZones: { ...local.rates?.deliveryZones, ...server.rates?.deliveryZones },
     },
     business: { ...local.business, ...server.business },
+    coupons: server.coupons ?? local.coupons,
+    promoBanner: server.promoBanner ?? local.promoBanner,
+    priceWatch: server.priceWatch ?? local.priceWatch,
   };
 }
 export function saveSettings(patch: OketexSettings) {
+  const cur = getSettings();
   const next: OketexSettings = {
-    plans: patch.plans ?? getSettings().plans,
-    partnerTerms: { ...getSettings().partnerTerms, ...patch.partnerTerms },
+    plans: patch.plans ?? cur.plans,
+    partnerTerms: { ...cur.partnerTerms, ...patch.partnerTerms },
     rates: {
-      ...getSettings().rates, ...patch.rates,
-      deliveryZones: { ...getSettings().rates?.deliveryZones, ...patch.rates?.deliveryZones },
+      ...cur.rates, ...patch.rates,
+      deliveryZones: { ...cur.rates?.deliveryZones, ...patch.rates?.deliveryZones },
     },
-    business: { ...getSettings().business, ...patch.business },
+    business: { ...cur.business, ...patch.business },
+    coupons: patch.coupons ?? cur.coupons,
+    promoBanner: patch.promoBanner ?? cur.promoBanner,
+    priceWatch: patch.priceWatch ?? cur.priceWatch,
   };
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
 }
@@ -114,6 +137,44 @@ export function getBusiness(): EffectiveBusiness {
 export function businessWaLink(text: string): string {
   return `https://wa.me/${getBusiness().whatsapp}?text=${encodeURIComponent(text)}`;
 }
+
+// ---------------- Phase 6: promotions (coupons + banner) ----------------
+export function getCoupons(): Coupon[] { return getSettings().coupons ?? []; }
+export function getPromoBanner(): PromoBanner { return getSettings().promoBanner ?? { text: "", active: false }; }
+export function getPriceWatch(): PriceWatchMaterial[] { return getSettings().priceWatch ?? []; }
+
+/** Coupon discount on a subtotal, in whole naira.
+ *  ROUNDING RULE: percent discounts are rounded HALF UP (Math.round on a
+ *  positive value rounds .5 upward) — e.g. 10% of ₦125,775 = ₦12,577.50 →
+ *  ₦12,578. A discount never exceeds the subtotal (total never below ₦0). */
+export function couponDiscountNgn(coupon: Coupon, subtotalNgn: number): number {
+  const sub = Math.max(0, Math.round(subtotalNgn || 0));
+  if (sub <= 0) return 0;
+  const raw = coupon.kind === "percent" ? (sub * Math.max(0, coupon.value)) / 100 : Math.max(0, coupon.value);
+  return Math.min(sub, Math.round(raw));
+}
+export type CouponCheck = { ok: true; coupon: Coupon; discountNgn: number } | { ok: false; error: string };
+/** Validate a code against a subtotal: must exist, be active, be unexpired
+ *  and meet its minimum spend. Pure (coupons + clock injected) for testing. */
+export function validateCoupon(rawCode: string, subtotalNgn: number, coupons: Coupon[] = getCoupons(), nowMs: number = Date.now()): CouponCheck {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) return { ok: false, error: "Enter a coupon code." };
+  const coupon = coupons.find(c => c.code.trim().toUpperCase() === code);
+  if (!coupon) return { ok: false, error: "That code is not recognised." };
+  if (!coupon.active) return { ok: false, error: "That coupon is not active right now." };
+  if (coupon.expiresAt && new Date(coupon.expiresAt).getTime() < nowMs) return { ok: false, error: "That coupon has expired." };
+  const sub = Math.max(0, Math.round(subtotalNgn || 0));
+  if (sub < (coupon.minSpend || 0)) return { ok: false, error: `This coupon needs an order of at least ₦${(coupon.minSpend || 0).toLocaleString("en-NG")}.` };
+  return { ok: true, coupon, discountNgn: couponDiscountNgn(coupon, sub) };
+}
+/** The shopper's applied coupon code persists across cart → checkout. */
+const APPLIED_COUPON_KEY = "oketex-applied-coupon";
+export function getAppliedCouponCode(): string {
+  try { return localStorage.getItem(APPLIED_COUPON_KEY) || ""; } catch { return ""; }
+}
+export function setAppliedCouponCode(code: string) {
+  try { if (code) localStorage.setItem(APPLIED_COUPON_KEY, code); else localStorage.removeItem(APPLIED_COUPON_KEY); } catch { /* ignore */ }
+}
 /** What is currently overridden vs default — for the Settings tab summary. */
 export function overrideSummary(): string[] {
   const s = getSettings(); const out: string[] = [];
@@ -124,6 +185,9 @@ export function overrideSummary(): string[] {
     if (keys.length) out.push(`Engineering rates: ${keys.join(", ")}`);
   }
   if (s.business && Object.keys(s.business).length) out.push(`Business details: ${Object.keys(s.business).join(", ")}`);
+  if (s.coupons && s.coupons.length) out.push(`Coupons: ${s.coupons.length}`);
+  if (s.promoBanner?.active) out.push("Promo banner active");
+  if (s.priceWatch && s.priceWatch.length) out.push(`Price watch: ${s.priceWatch.length} materials`);
   return out;
 }
 

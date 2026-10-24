@@ -23,6 +23,13 @@ import offers from "./handlers/offers.js";
 import payInit from "./handlers/payments/initialize.js";
 import payVerify from "./handlers/payments/verify.js";
 import payWebhook from "./handlers/payments/webhook.js";
+import jobs from "./handlers/jobs.js";
+import jobsBid from "./handlers/jobs/bid.js";
+import jobsAward from "./handlers/jobs/award.js";
+import reviews from "./handlers/reviews.js";
+import notifications from "./handlers/notifications.js";
+import notificationsDispatch from "./handlers/notifications/dispatch.js";
+import aiAssist from "./handlers/ai/assist.js";
 
 const exact: Record<string, any> = {
   "/api/health": health,
@@ -42,6 +49,13 @@ const exact: Record<string, any> = {
   "/api/payments/initialize": payInit,
   "/api/payments/verify": payVerify,
   "/api/payments/webhook": payWebhook,
+  "/api/jobs": jobs,
+  "/api/jobs/bid": jobsBid,
+  "/api/jobs/award": jobsAward,
+  "/api/reviews": reviews,
+  "/api/notifications": notifications,
+  "/api/notifications/dispatch": notificationsDispatch,
+  "/api/ai/assist": aiAssist,
 };
 
 export default async function router(req: any, res: any) {

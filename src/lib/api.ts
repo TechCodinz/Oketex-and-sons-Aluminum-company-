@@ -3,7 +3,7 @@
 // the database answers (health.db === true). Every store wrapper tries the
 // API first when live and falls back to the exact localStorage behaviour on
 // ANY failure, so the site can never break because the backend is absent.
-export interface Health { ok: boolean; db: boolean; auth?: boolean; payments?: boolean; ts?: string }
+export interface Health { ok: boolean; db: boolean; auth?: boolean; payments?: boolean; /** Phase 6/7: true only when AI_VISION_URL + AI_VISION_KEY are set server-side. */ ai?: boolean; ts?: string }
 
 let liveCache: boolean | null = null;
 let healthCache: Health | null = null;

@@ -6,6 +6,7 @@ import { formatNGN } from "@/lib/money";
 import { getPartners, getPartnersAsync, type Partner } from "@/lib/partnerStorage";
 import { PRO_TRADES, SELLER_CATEGORIES } from "@/data/partnerTerms";
 import { getPartnerTerms } from "@/lib/settings";
+import { reviewSummaryFor, starsText, syncReviewsAsync } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 
 export function lowestPrice(p: Partner): number | null {
@@ -25,6 +26,9 @@ export function PartnerCard({ p }: { p: Partner }) {
       </div>
       <h3 className="font-display font-bold uppercase text-xl mt-4 leading-tight flex items-center gap-2">{p.businessName}{p.verified && <BadgeCheck className="h-5 w-5 text-primary shrink-0" aria-label="Verified by Oketex" />}</h3>
       {p.verified && <p className="font-tech text-[10px] uppercase tracking-widest text-primary mt-1">Verified by Oketex</p>}
+      {(() => { const s = reviewSummaryFor(p.code); return s.count > 0
+        ? <p className="font-tech text-xs mt-1.5"><span className="text-primary">{starsText(s.avg)}</span> <span className="font-semibold">{s.avg.toFixed(1)}</span> <span className="text-muted-foreground">({s.count} review{s.count === 1 ? "" : "s"})</span></p>
+        : <p className="font-tech text-[11px] text-muted-foreground mt-1.5">No reviews yet</p>; })()}
       <p className="font-tech text-xs text-muted-foreground mt-2 flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {p.location}{p.role === "pro" && p.yearsExperience ? ` · ${p.yearsExperience} yrs experience` : ""}</p>
       <p className="font-tech text-[11px] text-muted-foreground">Serves: {p.areas}</p>
       <div className="flex flex-wrap gap-1.5 mt-3">{tags.map(t => <span key={t} className="border hairline px-2 py-1 font-tech text-[10px] uppercase tracking-wider">{t}</span>)}</div>
@@ -42,7 +46,8 @@ export default function Partners() {
   const [tag, setTag] = useState("");
   const [loc, setLoc] = useState("");
   const [all, setAll] = useState<Partner[]>(() => getPartners().filter(p => p.status === "approved"));
-  useEffect(() => { let on = true; getPartnersAsync().then(list => { if (on) setAll(list); }); return () => { on = false; }; }, []);
+  const [, setReviewTick] = useState(0);
+  useEffect(() => { let on = true; getPartnersAsync().then(list => { if (on) setAll(list); }); syncReviewsAsync().then(() => { if (on) setReviewTick(n => n + 1); }); return () => { on = false; }; }, []);
   const tagOptions = role === "pro" ? [...PRO_TRADES] : role === "seller" ? [...SELLER_CATEGORIES] : [...PRO_TRADES, ...SELLER_CATEGORIES];
   const list = useMemo(() => {
     const s = search.trim().toLowerCase(), l = loc.trim().toLowerCase();

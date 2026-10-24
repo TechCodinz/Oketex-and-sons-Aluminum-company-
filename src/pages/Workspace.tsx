@@ -9,6 +9,7 @@ import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink } from "@/lib/settings";
 import { Link } from "react-router";
 import PlanGate, { PlanChip } from "@/components/PlanGate";
+import InstallCard from "@/components/InstallCard";
 import { useEntitlements, FREE_PROJECT_LIMIT } from "@/lib/plans";
 import { calculateRoof, PROFILES, type RoofResult } from "@/lib/roofEngine";
 import {
@@ -111,6 +112,7 @@ export default function Workspace() {
     <Link to="/roofing-guide" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary">Roofing Guide — styles & measurements</Link>
     <span className="ml-auto"><PlanChip /></span>
   </div>
+  <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 no-print"><InstallCard /></div>
   {showPlanLock && (<div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 no-print"><PlanGate feature="Unlimited Workspace projects"><span /></PlanGate><div className="text-center mt-3"><button onClick={() => setShowPlanLock(false)} className="font-tech text-xs text-muted-foreground hover:text-primary cursor-pointer">← Back to my project (your existing project keeps working)</button></div></div>)}
   <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid lg:grid-cols-[300px_1fr] gap-8">
     {/* Project list */}

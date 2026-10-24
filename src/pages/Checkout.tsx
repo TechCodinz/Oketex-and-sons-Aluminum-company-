@@ -9,11 +9,18 @@ import { saveOrderAsync, orderCode } from "@/lib/storage";
 import { paymentsApi } from "@/lib/api";
 import { CreditCard } from "lucide-react";
 import { BUSINESS } from "@/contracts/constants";
-import { getBusiness, businessWaLink } from "@/lib/settings";
+import { getBusiness, businessWaLink, getAppliedCouponCode, setAppliedCouponCode, validateCoupon } from "@/lib/settings";
+import { notify } from "@/lib/notify";
 export default function Checkout(){
  const { lines, totalNgn, clear } = useCart(); const navigate=useNavigate();
  const [f,setF]=useState({name:"",phone:"",email:"",address:"",note:""});
  const [placing,setPlacing]=useState(false);
+ const [couponInput,setCouponInput]=useState(()=>getAppliedCouponCode());
+ const [appliedCode,setAppliedCode]=useState(()=>getAppliedCouponCode());
+ const check=appliedCode?validateCoupon(appliedCode,totalNgn):null;
+ const discountNgn=check?.ok?check.discountNgn:0;
+ const finalTotal=Math.max(0,totalNgn-discountNgn);
+ const applyCoupon=()=>{ const r=validateCoupon(couponInput,totalNgn); if(!r.ok) return toast.error(r.error); setAppliedCouponCode(r.coupon.code); setAppliedCode(r.coupon.code); toast.success(`Coupon ${r.coupon.code} applied — ${formatNGN(r.discountNgn)} off`); };
  const place=async(payNow=false)=>{
   if(!lines.length) return toast.error("Cart is empty");
   if(f.name.length<2) return toast.error("Enter your full name");
@@ -23,11 +30,13 @@ export default function Checkout(){
   setPlacing(true);
   const code=orderCode();
   const items=lines.map(l=>({name:l.name,unit:l.unit,unitPriceNgn:l.priceNgn,quantity:l.quantity,lineTotalNgn:l.priceNgn*l.quantity}));
-  const wa=`Hello ${BUSINESS.name}, my order ${code} totals ${formatNGN(totalNgn)} (${lines.map(l=>`${l.quantity}× ${l.name}`).join(", ")}). Name: ${f.name}, Address: ${f.address}. Please confirm.`;
-  await saveOrderAsync({code,name:f.name,phone:f.phone,email:f.email,address:f.address,note:f.note,items,totalNgn,status:"pending",createdAt:new Date().toISOString()});
+  const wa=`Hello ${BUSINESS.name}, my order ${code} totals ${formatNGN(finalTotal)} (${lines.map(l=>`${l.quantity}× ${l.name}`).join(", ")})${discountNgn>0&&check?.ok?` — includes coupon ${check.coupon.code} discount of ${formatNGN(discountNgn)} on a ${formatNGN(totalNgn)} subtotal`:""}. Name: ${f.name}, Address: ${f.address}. Please confirm.`;
+  await saveOrderAsync({code,name:f.name,phone:f.phone,email:f.email,address:f.address,note:f.note,items,totalNgn:finalTotal,...(discountNgn>0&&check?.ok?{subtotalNgn:totalNgn,couponCode:check.coupon.code,discountNgn}:{}),status:"pending",createdAt:new Date().toISOString()});
+  notify({templateKey:"order_placed",audience:"admin",refCode:code,vars:{name:f.name,phone:f.phone,amount:formatNGN(finalTotal)}});
+  if(discountNgn>0) setAppliedCouponCode("");
   if(payNow){
     // Paystack — only redirects when the server confirms payments are enabled.
-    const init=await paymentsApi.initialize({email:f.email.trim(),amountNgn:totalNgn,purpose:"order",refId:code});
+    const init=await paymentsApi.initialize({email:f.email.trim(),amountNgn:finalTotal,purpose:"order",refId:code});
     if(init.enabled && init.authorizationUrl){ clear(); window.location.href=init.authorizationUrl; return; }
     setPlacing(false);
     toast.message(init.enabled ? "Payment could not start — order saved; pay on WhatsApp instead." : "Online payment isn't enabled yet — order saved; complete it on WhatsApp.");
@@ -41,6 +50,13 @@ export default function Checkout(){
   {[["name","Full name","Adaeze Okonkwo"],["phone","Phone / WhatsApp","0803 000 0000"],["email","Email (for receipts)",""],["address","Delivery address","Street, town, state"],["note","Note (optional)","Landmark, timeline…"]].map(([id,label,ph])=>(
    <div key={id}><label className="label-tech" htmlFor={`c-${id}`}>{label}</label>{id==="address"||id==="note"?<textarea id={`c-${id}`} className="field-tech" rows={id==="address"?2:1} placeholder={ph} value={(f as any)[id]} onChange={e=>setF({...f,[id]:e.target.value})} />:<input id={`c-${id}`} className="field-tech" placeholder={ph} value={(f as any)[id]} onChange={e=>setF({...f,[id]:e.target.value})} />}</div>))}
  </div>
- <aside className="border hairline bg-card h-fit p-6"><p className="label-tech mb-4">Order summary</p>{lines.map(l=>(<div key={l.productId} className="flex justify-between text-sm py-2 border-b hairline"><span>{l.quantity}× {l.name}</span><span className="font-tech">{formatNGN(l.priceNgn*l.quantity)}</span></div>))}<div className="flex justify-between mt-4"><span className="label-tech">Total</span><span className="font-display font-bold text-2xl text-primary">{formatNGN(totalNgn)}</span></div><Button className="w-full mt-6 rounded-none h-12 font-display uppercase" disabled={placing} onClick={()=>void place(false)}>Place order</Button><Button variant="outline" className="w-full mt-2 rounded-none h-11 font-display uppercase" disabled={placing} onClick={()=>void place(true)}><CreditCard className="h-4 w-4 mr-2" /> Pay now with Paystack</Button><p className="font-tech text-[11px] text-muted-foreground mt-3">Card payment opens Paystack's secure checkout when online payments are enabled; otherwise the order is saved and you pay on WhatsApp as usual.</p><a className="font-tech text-xs text-primary mt-2 inline-block" target="_blank" rel="noreferrer" href={businessWaLink(`Hello ${BUSINESS.name}, I want to place an order.`)}>WhatsApp {getBusiness().phone}</a></aside>
+ <aside className="border hairline bg-card h-fit p-6"><p className="label-tech mb-4">Order summary</p>{lines.map(l=>(<div key={l.productId} className="flex justify-between text-sm py-2 border-b hairline"><span>{l.quantity}× {l.name}</span><span className="font-tech">{formatNGN(l.priceNgn*l.quantity)}</span></div>))}
+ <div className="mt-4">
+  {appliedCode && check?.ok ? (<div className="flex items-center justify-between border border-primary/50 bg-primary/10 px-3 py-2"><span className="font-tech text-xs">{check.coupon.code} — {formatNGN(discountNgn)} off</span><button onClick={()=>{setAppliedCouponCode("");setAppliedCode("");setCouponInput("");}} className="font-tech text-[11px] text-muted-foreground hover:text-destructive cursor-pointer">Remove</button></div>)
+  : (<div className="flex gap-2"><input value={couponInput} onChange={e=>setCouponInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&applyCoupon()} placeholder="COUPON CODE" className="field-tech font-tech text-xs" aria-label="Coupon code" /><Button variant="outline" className="rounded-none font-display uppercase text-xs shrink-0" onClick={applyCoupon}>Apply</Button></div>)}
+  {appliedCode && check && !check.ok && <p className="font-tech text-[11px] text-amber-400 mt-2">{check.error}</p>}
+ </div>
+ {discountNgn>0 && (<><div className="flex justify-between mt-4 font-tech text-xs text-muted-foreground"><span>Subtotal</span><span>{formatNGN(totalNgn)}</span></div><div className="flex justify-between font-tech text-xs text-emerald-400 mt-1"><span>Coupon discount</span><span>−{formatNGN(discountNgn)}</span></div></>)}
+ <div className="flex justify-between mt-4"><span className="label-tech">Total</span><span className="font-display font-bold text-2xl text-primary">{formatNGN(finalTotal)}</span></div><Button className="w-full mt-6 rounded-none h-12 font-display uppercase" disabled={placing} onClick={()=>void place(false)}>Place order</Button><Button variant="outline" className="w-full mt-2 rounded-none h-11 font-display uppercase" disabled={placing} onClick={()=>void place(true)}><CreditCard className="h-4 w-4 mr-2" /> Pay now with Paystack</Button><p className="font-tech text-[11px] text-muted-foreground mt-3">Card payment opens Paystack's secure checkout when online payments are enabled; otherwise the order is saved and you pay on WhatsApp as usual.</p><a className="font-tech text-xs text-primary mt-2 inline-block" target="_blank" rel="noreferrer" href={businessWaLink(`Hello ${BUSINESS.name}, I want to place an order.`)}>WhatsApp {getBusiness().phone}</a></aside>
  </div></div>);
 }

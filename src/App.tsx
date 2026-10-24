@@ -30,6 +30,8 @@ import PaymentReturn from "./pages/PaymentReturn";
 import Documents from "./pages/Documents";
 import RoofingGuide from "./pages/RoofingGuide";
 import Plans from "./pages/Plans";
+import Jobs from "./pages/Jobs";
+import Prices from "./pages/Prices";
 export default function App(){
  // Phase 5: probe the backend once; when live, pull the server settings
  // document so admin-set rates/terms/business details win site-wide.
@@ -50,6 +52,8 @@ export default function App(){
   <Route path="/roofing-guide" element={<RoofingGuide />} />
   <Route path="/plans" element={<Plans />} />
   <Route path="/book" element={<Book />} />
+  <Route path="/jobs" element={<Jobs />} />
+  <Route path="/prices" element={<Prices />} />
   <Route path="/partners" element={<Partners />} />
   <Route path="/partners/:code" element={<PartnerProfile />} />
   <Route path="/join" element={<Join />} />

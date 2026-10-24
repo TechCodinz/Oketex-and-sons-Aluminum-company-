@@ -22,6 +22,7 @@ import PlanGate, { PlanChip } from "@/components/PlanGate";
 import { useEntitlements, FREE_DOCUMENT_LIMIT } from "@/lib/plans";
 import { getEstimates } from "@/lib/projectEstimator";
 import { getProProjects, uid } from "@/lib/proStorage";
+import { notify } from "@/lib/notify";
 
 type Tab = "notes" | "quotations" | "contracts" | "invoices" | "files";
 const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
@@ -324,7 +325,7 @@ function InvoicesTab({ store, update, lh, limitHit }: { store: DocumentsStore; u
         <div className="border hairline bg-card p-6 no-print">
           <div className="flex flex-wrap gap-3 items-center justify-between"><p className="font-tech text-sm">Status: <StatusChip status={display} /></p>
             <div className="flex flex-wrap gap-2">
-              {sel.status !== "Sent" && display !== "Paid" && <Button variant="outline" className="rounded-none font-display uppercase text-xs" onClick={() => patch({ status: "Sent" })}>Mark as sent</Button>}
+              {sel.status !== "Sent" && display !== "Paid" && <Button variant="outline" className="rounded-none font-display uppercase text-xs" onClick={() => { patch({ status: "Sent" }); notify({ templateKey: "invoice_sent", audience: "customer", refCode: sel.code, phone: sel.clientPhone, vars: { name: sel.clientName || "Customer", total: formatNGN(invoiceTotals(sel).grandTotal), balance: formatNGN(invoiceBalance(sel)), due: fmtDate(sel.dueDate) } }); }}>Mark as sent</Button>}
               <Button variant="outline" className="rounded-none font-display uppercase text-xs" asChild><a target="_blank" rel="noreferrer" href={clientWaLink(sel.clientPhone, waText)}><MessageCircle className="h-3.5 w-3.5 mr-1" /> WhatsApp client</a></Button>
               <Button className="rounded-none font-display uppercase text-xs" onClick={() => window.print()}><Printer className="h-3.5 w-3.5 mr-1" /> Print / PDF</Button>
             </div></div>

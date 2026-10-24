@@ -11,6 +11,7 @@ import { formatNGN } from "./money";
 import { quoteCode, saveQuoteAsync, type LocalQuote } from "./storage";
 import { bookingCode, saveBookingAsync } from "./proStorage";
 import { getEntitlements } from "./plans";
+import { notify } from "./notify";
 
 // ---- Tier model -------------------------------------------------------------
 // Tier factors scale the engine's Standard total. Basic = an economy spec of
@@ -154,6 +155,7 @@ export async function createVerifyRequest(input: { quoteCode: string; name: stri
     proNote: "", finalTotal: null, priority, createdAt: new Date().toISOString(),
   };
   saveVerifyRequests([rec, ...getVerifyRequests()]);
+  notify({ templateKey: "verify_requested", audience: "admin", refCode: rec.code, vars: { name: input.name, phone: input.phone } });
   await saveBookingAsync({
     code: bookingCode(), service: "quote-verification", serviceLabel: "Quote Verification Visit",
     date: input.preferredDate || new Date().toISOString().slice(0, 10), slot: "Morning 8-11",

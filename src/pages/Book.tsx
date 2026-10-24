@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink } from "@/lib/settings";
 import { BOOKING_SERVICES, bookingCode, saveBookingAsync } from "@/lib/proStorage";
+import { notify } from "@/lib/notify";
 
 const SLOTS = ["Morning 8–11", "Midday 11–2", "Afternoon 2–5"] as const;
 const BUILDING_TYPES = ["Bungalow", "Duplex", "Storey Building", "Commercial", "Warehouse", "Church"] as const;
@@ -37,6 +38,7 @@ export default function Book() {
       buildingType: form.buildingType, stage: form.stage, notes: form.notes.trim() || undefined,
       status: "pending", createdAt: new Date().toISOString(),
     });
+    notify({ templateKey: "booking_created", audience: "admin", refCode: code, vars: { service: serviceLabel, name: form.name.trim(), date: `${form.date} · ${form.slot}`, phone: form.phone.trim() } });
     const summary = `BOOKING ${code} — ${BUSINESS.name}\nService: ${serviceLabel}\nWhen: ${form.date} · ${form.slot}\nName: ${form.name}\nPhone: ${form.phone}\nSite: ${form.address}${form.lgaState ? ` (${form.lgaState})` : ""}\nBuilding: ${form.buildingType} · Stage: ${form.stage}${form.notes ? `\nNotes: ${form.notes}` : ""}\nPlease confirm my booking. Thank you.`;
     setDone({ code, summary });
     toast.success("Booking saved");

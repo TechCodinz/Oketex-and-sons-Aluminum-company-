@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getProProjects, saveProProjects, uid } from "@/lib/proStorage";
 import PlanGate, { PlanChip } from "@/components/PlanGate";
+import AiAssistPanel from "@/components/AiAssistPanel";
 
 type Pt = { x: number; y: number };
 type Line = { a: Pt; b: Pt; label: string; metres: number };
@@ -263,5 +264,6 @@ export default function SnapMeasure() {
         <PlanChip />
       </div>
       {mode === "photo" ? <PhotoMeasure /> : (<PlanGate feature="Live Video Measure"><LiveMeasure /></PlanGate>)}
+      <div className="mt-10"><AiAssistPanel context="snap-measure" /></div>
     </div></div>);
 }

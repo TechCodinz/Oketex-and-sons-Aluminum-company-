@@ -15,7 +15,14 @@ export default wrap(async (req: any, res: any) => {
     if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
     if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
     const b = await readJson(req);
-    const value = { partnerTerms: b.partnerTerms || undefined, rates: b.rates || undefined, business: b.business || undefined };
+    // Pass through every settings group the frontend manages — dropping a
+    // group here would silently wipe it for every visitor on the next save
+    // (plans had this bug; coupons/promoBanner/priceWatch joined in Phase 6).
+    const value = {
+      partnerTerms: b.partnerTerms || undefined, rates: b.rates || undefined, business: b.business || undefined,
+      plans: b.plans || undefined, coupons: b.coupons || undefined,
+      promoBanner: b.promoBanner || undefined, priceWatch: b.priceWatch || undefined,
+    };
     await dbQuery(
       `INSERT INTO settings (key, value, updated_at) VALUES ('site', $1::jsonb, now())
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,

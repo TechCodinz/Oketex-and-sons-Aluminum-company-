@@ -10,6 +10,10 @@ export { eavesCalc, pitchFromRiseRun } from "@/data/roofingGuide";
 export { computeEntitlements, redeemPlanCode, DEFAULT_PLANS } from "@/lib/plans";
 export { computeAssistantRange, parseDims, parseArea, parsePitch, isQuoteIntent } from "@/lib/assistantBrain";
 export { calculateRoof } from "@/lib/roofEngine";
+export { couponDiscountNgn, validateCoupon } from "@/lib/settings";
+export { summarizeReviews } from "@/lib/reviews";
+export { renderTemplate } from "@/lib/notify";
+export { translate } from "@/lib/i18n";
 `;
 writeFileSync("/tmp/verify-entry.ts", entry);
 await build({ entryPoints: ["/tmp/verify-entry.ts"], bundle: true, platform: "node", format: "esm", outfile: "/tmp/verify-bundle.mjs", alias: { "@": process.cwd() + "/src" }, logLevel: "silent" });
@@ -78,6 +82,45 @@ eq("parseArea '45 m2'", M.parseArea("45 m2"), 45);
 eq("parsePitch '30 degrees'", M.parsePitch("30 degrees"), 30);
 ok("isQuoteIntent 'write me a quote'", M.isQuoteIntent("please write me a quote for my roof") === true);
 ok("isQuoteIntent 'estimate my tiling'", M.isQuoteIntent("estimate my tiling") === true);
+
+console.log("— Coupons (Phase 6) —");
+// Spec fixture: 10% coupon on a ₦125,775 subtotal → discount ₦12,578
+// (percent discounts round HALF UP to the nearest naira) → total ₦113,197.
+const c10 = { code: "SAVE10", kind: "percent", value: 10, minSpend: 0, active: true };
+eq("10% of 125,775 rounds half up", M.couponDiscountNgn(c10, 125775), 12578);
+const vOk = M.validateCoupon("save10", 125775, [c10], Date.now());
+ok("validate SAVE10 (case-insensitive) -> ok", vOk.ok === true);
+if (vOk.ok) { eq("validated discount", vOk.discountNgn, 12578); eq("total after discount", 125775 - vOk.discountNgn, 113197); }
+ok("unknown code -> rejected", M.validateCoupon("NOPE", 125775, [c10], Date.now()).ok === false);
+ok("inactive coupon -> rejected", M.validateCoupon("SAVE10", 125775, [{ ...c10, active: false }], Date.now()).ok === false);
+ok("expired coupon -> rejected", M.validateCoupon("SAVE10", 125775, [{ ...c10, expiresAt: "2020-01-01" }], Date.now()).ok === false);
+ok("below min spend -> rejected", M.validateCoupon("SAVE10", 5000, [{ ...c10, minSpend: 10000 }], Date.now()).ok === false);
+const fixed = { code: "FLAT5K", kind: "fixed", value: 5000, minSpend: 0, active: true };
+eq("fixed 5,000 on 125,775", M.couponDiscountNgn(fixed, 125775), 5000);
+eq("fixed discount capped at subtotal (never below 0)", M.couponDiscountNgn(fixed, 4000), 4000);
+
+console.log("— Review averages (Phase 6) —");
+const sum = M.summarizeReviews([{ rating: 5 }, { rating: 4 }, { rating: 4 }]);
+eq("average of 5,4,4 -> 4.3", sum.avg, 4.3);
+eq("count of 5,4,4 -> 3", sum.count, 3);
+const sum0 = M.summarizeReviews([]);
+eq("no reviews -> avg 0", sum0.avg, 0);
+eq("no reviews -> count 0", sum0.count, 0);
+
+console.log("— Notification templates (Phase 6) —");
+// renderTemplate is pure substitution — notify() injects {business} from
+// getBusiness() at send time, so the fixture passes it the same way.
+const msg = M.renderTemplate("order_placed", { business: "Oketex & Sons Aluminum Co.", code: "OKX-2026-0001", name: "Adaeze", phone: "0803 000 0000", amount: "₦113,197" });
+ok("template renders business name", msg.includes("Oketex"));
+ok("template renders code + amount", msg.includes("OKX-2026-0001") && msg.includes("₦113,197"));
+ok("template leaves no placeholders", !msg.includes("{") && !msg.includes("}"));
+
+console.log("— i18n dictionary (Phase 7) —");
+ok("pcm nav.track differs from EN", M.translate("pcm", "nav.track") !== M.translate("en", "nav.track"));
+eq("pcm nav.track is Pidgin", M.translate("pcm", "nav.track"), "Track Am");
+ok("yo hero title part 2 present", M.translate("yo", "hero.title2").length > 0);
+ok("ha nav.jobs present", M.translate("ha", "nav.jobs").length > 0);
+eq("unknown key falls back to the key", M.translate("pcm", "no.such.key"), "no.such.key");
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

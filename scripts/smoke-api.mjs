@@ -78,12 +78,12 @@ check(`statements applied == SCHEMA_STATEMENTS (${api.SCHEMA_STATEMENTS.length})
 // limitation), so instead of a second setup call we assert the outcome a
 // re-run must preserve: all 9 tables exist and stay writable.
 const tbl = await api.dbQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-check("all 9 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
+check("all 13 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
 
 // ---------- 2. Health ----------
 console.log("\n[2] GET /api/health");
 r = await call(api.health, {});
-check("ok:true db:true auth:true payments:true", r.json?.ok === true && r.json?.db === true && r.json?.auth === true && r.json?.payments === true, r.raw.slice(0, 160));
+check("ok:true db:true auth:true payments:true ai:false (no vision env)", r.json?.ok === true && r.json?.db === true && r.json?.auth === true && r.json?.payments === true && r.json?.ai === false, r.raw.slice(0, 160));
 
 // ---------- 3. Auth: register / login / me / JWT ----------
 console.log("\n[3] Auth — register, login, session cookie, JWT round-trip");
@@ -193,6 +193,76 @@ const badAmtSig = crypto.createHmac("sha512", savedKey).update(badAmtBody).diges
 r = await call(api.webhook, { method: "POST", headers: { "x-paystack-signature": badAmtSig }, body: badAmtBody });
 r = await call(api.partners, { method: "GET" });
 check("amount mismatch: featured NOT applied", !(r.json?.partners || []).some(p => p.code === "PRT-2026-SMOKE" && p.featured === true));
+
+// ---------- 10. Jobs board + bidding + award → lead (Phase 6) ----------
+console.log("\n[10] Jobs — post, public board privacy, bids, award creates lead with commission snapshot");
+r = await call(api.jobs, { method: "POST", body: { code: "JB-2026-SMOKE", title: "Re-roof a 4-bed duplex", trade: "Roofer", description: "Remove old sheets, supply + install longspan 0.55", location: "Sangotedo, Lagos", budgetLow: 1500000, budgetHigh: 2200000, customerName: "Buyer One", customerPhone: "08033334444" } });
+check("job POST accepted (201)", r.status === 201 && r.json?.job?.status === "Open", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.jobs, { method: "GET" });
+const boardJob = (r.json?.jobs || []).find(j => j.code === "JB-2026-SMOKE");
+check("public board lists the Open job", !!boardJob);
+check("public board strips the customer phone", boardJob && boardJob.customerPhone === "", JSON.stringify(boardJob).slice(0, 160));
+r = await call(api.jobsBid, { method: "POST", body: { jobCode: "JB-2026-SMOKE", partnerCode: "PRT-2026-SMOKE", amount: 2000000, days: 10, note: "Crew of 4, materials included" } });
+check("approved partner bid accepted", (r.status === 201 || r.status === 200) && r.json?.bid?.status === "Pending", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+const smokeBidId = r.json?.bid?.id;
+// A second partner must exist to prove losing bids get Rejected.
+const partner2 = { ...partnerBody, code: "PRT-2026-SMOKE2", businessName: "Second Roofing Co", email: "two@partner.test" };
+await call(api.partners, { method: "POST", body: partner2 });
+await call(api.adminPartners, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "PRT-2026-SMOKE2", status: "approved" } });
+r = await call(api.jobsBid, { method: "POST", body: { jobCode: "JB-2026-SMOKE", partnerCode: "PRT-2026-SMOKE2", amount: 2100000, days: 12, note: "" } });
+check("second partner bid accepted", (r.status === 201 || r.status === 200) && !!r.json?.bid?.id, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.jobsBid, { method: "POST", body: { jobCode: "JB-2026-SMOKE", partnerCode: "PRT-2026-NOPE", amount: 100, days: 1 } });
+check("bid from unknown partner rejected (404)", r.status === 404, `got ${r.status}`);
+r = await call(api.jobs, { method: "GET", query: { code: "JB-2026-SMOKE" } });
+check("code lookup without phone proof stays phone-safe", r.json?.job?.customerPhone === "" && (r.json?.bids || []).length === 2, r.raw.slice(0, 160));
+r = await call(api.jobs, { method: "GET", query: { code: "JB-2026-SMOKE", phone: "08033334444" } });
+check("code lookup with matching phone reveals phone + bids", r.json?.job?.customerPhone === "08033334444" && (r.json?.bids || []).length === 2, r.raw.slice(0, 160));
+// Effective commission is whatever the settings section set earlier (9%).
+r = await call(api.settings, { method: "GET" });
+const effPct = r.json?.settings?.partnerTerms?.referralCommissionPct;
+r = await call(api.jobsAward, { method: "POST", body: { jobCode: "JB-2026-SMOKE", bidId: smokeBidId } });
+check("award succeeds", r.status === 200 && r.json?.job?.status === "Awarded", `got ${r.status}: ${r.raw.slice(0, 200)}`);
+check("winner bid Accepted, loser Rejected", (r.json?.bids || []).filter(b => b.status === "Accepted").length === 1 && (r.json?.bids || []).filter(b => b.status === "Rejected").length === 1, r.raw.slice(0, 200));
+check("award creates lead with commission snapshot at effective terms", r.json?.lead?.partnerCode === "PRT-2026-SMOKE" && r.json?.lead?.estValueNgn === 2000000 && r.json?.lead?.commissionPct === effPct && r.json?.lead?.commissionNgn === Math.round(2000000 * effPct / 100), r.raw.slice(0, 240));
+r = await call(api.jobsAward, { method: "POST", body: { jobCode: "JB-2026-SMOKE", bidId: smokeBidId } });
+check("re-award of a closed job rejected (409)", r.status === 409, `got ${r.status}`);
+r = await call(api.jobs, { method: "PATCH", headers: { cookie: loginCookie }, body: { code: "JB-2026-SMOKE", status: "Closed" } });
+check("non-admin job moderation rejected (401)", r.status === 401, `got ${r.status}`);
+r = await call(api.jobs, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "JB-2026-SMOKE", status: "Closed" } });
+check("admin closes the job", r.status === 200 && r.json?.job?.status === "Closed", `got ${r.status}`);
+
+// ---------- 11. Reviews (Phase 6) ----------
+console.log("\n[11] Reviews — create, summary average, moderation");
+const mkReview = (rating, name) => call(api.reviews, { method: "POST", body: { partnerCode: "PRT-2026-SMOKE", customerName: name, rating, text: `Rated ${rating}`, refCode: "JB-2026-SMOKE" } });
+r = await mkReview(5, "Rev One"); check("review 5★ created", r.status === 201, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+await mkReview(4, "Rev Two");
+r = await mkReview(4, "Rev Three");
+const thirdReviewId = r.json?.review?.id;
+r = await call(api.reviews, { method: "POST", body: { partnerCode: "PRT-2026-SMOKE", customerName: "No Ref", rating: 5, text: "x" } });
+check("review without refCode rejected (400)", r.status === 400, `got ${r.status}`);
+r = await call(api.reviews, { method: "GET", query: { partnerCode: "PRT-2026-SMOKE" } });
+check("summary: 3 published, avg 4.3 (5,4,4)", r.json?.summary?.count === 3 && r.json?.summary?.avg === 4.3, r.raw.slice(0, 160));
+r = await call(api.reviews, { method: "PATCH", headers: { cookie: adminCookie }, body: { id: thirdReviewId, status: "Hidden" } });
+check("admin hides a review", r.status === 200 && r.json?.review?.status === "Hidden", `got ${r.status}`);
+r = await call(api.reviews, { method: "GET", query: { partnerCode: "PRT-2026-SMOKE" } });
+check("summary after hide: 2 published, avg 4.5", r.json?.summary?.count === 2 && r.json?.summary?.avg === 4.5, r.raw.slice(0, 160));
+r = await call(api.reviews, { method: "DELETE", headers: { cookie: adminCookie }, query: { id: thirdReviewId } });
+check("admin deletes the hidden review", r.status === 200, `got ${r.status}`);
+
+// ---------- 12. Notifications + dispatch honesty + AI slot (Phase 6) ----------
+console.log("\n[12] Notifications — log, admin list, dispatch without providers stays logged; AI assist disabled");
+r = await call(api.notifications, { method: "POST", body: { id: "NTF-SMOKE1", audience: "admin", refCode: "BK-2026-SMOKE", channel: "sms", templateKey: "booking_created", message: "New booking BK-2026-SMOKE at Oketex & Sons Aluminum Co.", status: "queued", phone: "08033334444" } });
+check("notification logged (201)", r.status === 201 && r.json?.notification?.status === "queued", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.notifications, { method: "GET", headers: { cookie: loginCookie } });
+check("notification list is admin-only (401)", r.status === 401, `got ${r.status}`);
+r = await call(api.notifications, { method: "GET", headers: { cookie: adminCookie } });
+check("admin sees the notification", (r.json?.notifications || []).some(n => n.id === "NTF-SMOKE1"), r.raw.slice(0, 160));
+r = await call(api.notificationsDispatch, { method: "POST", headers: { cookie: adminCookie }, body: {} });
+check("dispatch with no provider keys → enabled:false, nothing sent", r.json?.enabled === false && r.json?.sent === 0, r.raw.slice(0, 200));
+r = await call(api.notifications, { method: "GET", headers: { cookie: adminCookie } });
+check("record stays queued/logged after no-provider dispatch", (r.json?.notifications || []).find(n => n.id === "NTF-SMOKE1")?.status === "queued");
+r = await call(api.aiAssist, { method: "POST", body: { imageDataUrl: "data:image/png;base64,AAAA" } });
+check("AI assist without env → {enabled:false}", r.status === 200 && r.json?.enabled === false, `got ${r.status}: ${r.raw.slice(0, 140)}`);
 
 console.log(`\nSMOKE RESULT: ${pass} passed, ${fail} failed${fail ? " — failures: " + failures.join("; ") : ""}`);
 process.exit(fail ? 1 : 0);

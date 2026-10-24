@@ -6,8 +6,54 @@ import { formatNGN } from "@/lib/money";
 import { findPartner, findPartnerAsync, addLeadAsync, waDigits, type Partner } from "@/lib/partnerStorage";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink, getBusiness } from "@/lib/settings";
+import { notify } from "@/lib/notify";
+import { addReviewAsync, reviewsForPartner, reviewSummaryFor, starsText, type Review } from "@/lib/reviews";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
+/** Reviews block (Phase 6): published reviews + average from real reviews
+ *  only; the form demands a reference code so reviews stay tied to real work. */
+function PartnerReviews({ partner }: { partner: Partner }) {
+  const [list, setList] = useState<Review[]>(() => reviewsForPartner(partner.code));
+  const summary = reviewSummaryFor(partner.code);
+  const [rf, setRf] = useState({ name: "", rating: 5, text: "", refCode: "" });
+  const submit = async () => {
+    if (rf.name.trim().length < 2) return toast.error("Enter your name");
+    if (rf.refCode.trim().length < 3) return toast.error("Enter your reference code — the lead, order or job code from your request");
+    if (rf.text.trim().length < 3) return toast.error("Write a few words about the work");
+    const r = await addReviewAsync({ partnerCode: partner.code, customerName: rf.name.trim(), rating: rf.rating, text: rf.text.trim(), refCode: rf.refCode.trim() });
+    setList(reviewsForPartner(partner.code));
+    setRf({ name: "", rating: 5, text: "", refCode: "" });
+    toast.success(`Thank you — your ${r.rating}★ review is published`);
+  };
+  return (
+    <section className="border hairline bg-card p-6">
+      <h2 className="font-display font-bold uppercase text-2xl mb-1">Customer reviews</h2>
+      {summary.count > 0
+        ? <p className="font-tech text-sm"><span className="text-primary">{starsText(summary.avg)}</span> <span className="font-semibold">{summary.avg.toFixed(1)}</span> average · {summary.count} review{summary.count === 1 ? "" : "s"}</p>
+        : <p className="font-tech text-sm text-muted-foreground">No reviews yet — be the first customer to review this partner after a job.</p>}
+      <div className="mt-5 space-y-4">
+        {list.map(r => (
+          <div key={r.id} className="border-t hairline pt-4">
+            <p className="font-tech text-sm"><span className="text-primary">{starsText(r.rating)}</span> <span className="font-semibold">{r.customerName}</span> <span className="text-muted-foreground text-[11px]">· {new Date(r.createdAt).toLocaleDateString("en-NG")} · ref {r.refCode}</span></p>
+            <p className="text-sm text-muted-foreground mt-1">{r.text}</p>
+          </div>
+        ))}
+      </div>
+      <div className="border-t hairline mt-6 pt-5">
+        <p className="label-tech mb-3">Review this {partner.role === "pro" ? "pro" : "seller"}</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div><label className="label-tech" htmlFor="rv-name">Your name</label><input id="rv-name" className="field-tech" value={rf.name} onChange={e => setRf({ ...rf, name: e.target.value })} placeholder="Full name" /></div>
+          <div><label className="label-tech" htmlFor="rv-ref">Reference code (required)</label><input id="rv-ref" className="field-tech font-tech" value={rf.refCode} onChange={e => setRf({ ...rf, refCode: e.target.value })} placeholder="LED-…, OKX-… or JB-…" /></div>
+        </div>
+        <div className="mt-4"><label className="label-tech">Your rating</label><div className="flex gap-1">{[1, 2, 3, 4, 5].map(n => (<button key={n} onClick={() => setRf({ ...rf, rating: n })} aria-label={`${n} stars`} className={`text-2xl cursor-pointer ${n <= rf.rating ? "text-primary" : "text-muted-foreground"}`}>★</button>))}</div></div>
+        <div className="mt-4"><label className="label-tech" htmlFor="rv-text">How was the work?</label><textarea id="rv-text" rows={3} className="field-tech resize-none" value={rf.text} onChange={e => setRf({ ...rf, text: e.target.value })} placeholder="Quality, punctuality, value for money…" /></div>
+        <Button className="rounded-none font-display uppercase h-11 mt-4" onClick={() => void submit()}>Publish review</Button>
+        <p className="font-tech text-[10px] text-muted-foreground mt-3">We ask for a reference code so reviews stay tied to real jobs and orders through Oketex. Reviews publish under your name; the Oketex admin can hide anything abusive.</p>
+      </div>
+    </section>
+  );
+}
 
 export default function PartnerProfile() {
   const TERMS = getPartnerTerms();
@@ -30,6 +76,8 @@ export default function PartnerProfile() {
     if (form.desc.trim().length < 5) return toast.error(`Describe the ${isSeller ? "supply request" : "job"}`);
     const est = Math.max(0, parseInt(form.value.replace(/\D/g, ""), 10) || 0);
     const lead = await addLeadAsync({ partnerCode: partner.code, partnerName: partner.businessName, type: isSeller ? "supply" : "job", customerName: form.name.trim(), customerPhone: form.phone.trim(), description: form.desc.trim(), estValueNgn: est });
+    notify({ templateKey: "lead_created_admin", audience: "admin", refCode: lead.id, vars: { name: form.name.trim(), phone: form.phone.trim(), partner: partner.businessName } });
+    notify({ templateKey: "lead_created_partner", audience: "partner", refCode: lead.id, phone: partner.phone, vars: { partner: partner.businessName, name: form.name.trim(), phone: form.phone.trim() } });
     setLeadRef(lead.id);
   };
 
@@ -54,6 +102,8 @@ export default function PartnerProfile() {
             <p className="text-sm mt-4 leading-relaxed">{partner.bio}</p>
             <div className="flex flex-wrap gap-1.5 mt-4">{(isSeller ? partner.categories : partner.trades).map(t => <span key={t} className="border hairline px-2 py-1 font-tech text-[10px] uppercase tracking-wider">{t}</span>)}</div>
           </section>
+
+          <PartnerReviews partner={partner} />
 
           {isSeller && partner.products.length > 0 && (
             <section className="border hairline bg-card p-6">

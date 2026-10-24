@@ -2662,10 +2662,43 @@ function publicUser(row) {
   };
 }
 
+// server/handlers/ai/assist.ts
+function aiConfigured() {
+  return !!(process.env.AI_VISION_URL || "").trim() && !!(process.env.AI_VISION_KEY || "").trim();
+}
+var assist_default = wrap(async (req, res) => {
+  if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
+  if (!aiConfigured()) return sendJson(res, 200, { enabled: false });
+  const b = await readJson(req);
+  const image = String(b.imageDataUrl || b.image || "");
+  if (!image) return sendJson(res, 400, { enabled: true, error: "Missing imageDataUrl" });
+  try {
+    const r = await fetch(String(process.env.AI_VISION_URL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.AI_VISION_KEY}` },
+      body: JSON.stringify({
+        image,
+        context: b.context || "building measurement",
+        prompt: b.prompt || "Identify measurable building elements in this photo and estimate their dimensions in metres. Return JSON."
+      })
+    });
+    const text = await r.text();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+    }
+    if (!r.ok) return sendJson(res, 502, { enabled: true, error: `AI service responded ${r.status}`, raw: text.slice(0, 500) });
+    return sendJson(res, 200, { enabled: true, result: parsed ?? text });
+  } catch (e) {
+    return sendJson(res, 502, { enabled: true, error: `AI service request failed: ${String(e?.message || e).slice(0, 200)}` });
+  }
+});
+
 // server/handlers/health.ts
 var health_default = wrap(async (_req, res) => {
   const db = isDbConfigured() ? await dbPing() : false;
-  return sendJson(res, 200, { ok: true, db, auth: authConfigured(), payments: paystackEnabled(), ts: (/* @__PURE__ */ new Date()).toISOString() });
+  return sendJson(res, 200, { ok: true, db, auth: authConfigured(), payments: paystackEnabled(), ai: aiConfigured(), ts: (/* @__PURE__ */ new Date()).toISOString() });
 });
 
 // server/schema.sql.ts
@@ -2782,7 +2815,63 @@ var SCHEMA_STATEMENTS = [
     note TEXT NOT NULL DEFAULT '',
     audience TEXT NOT NULL DEFAULT 'all',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`
+  )`,
+  // ---- Phase 6: jobs board + bidding (frontend shapes in src/lib/jobs.ts) ----
+  `CREATE TABLE IF NOT EXISTS jobs (
+    code TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    trade TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    budget_low BIGINT NOT NULL DEFAULT 0,
+    budget_high BIGINT NOT NULL DEFAULT 0,
+    customer_name TEXT NOT NULL DEFAULT '',
+    customer_phone TEXT NOT NULL DEFAULT '',
+    source_quote_code TEXT,
+    status TEXT NOT NULL DEFAULT 'Open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (status)`,
+  `CREATE TABLE IF NOT EXISTS bids (
+    id TEXT PRIMARY KEY,
+    job_code TEXT NOT NULL,
+    partner_code TEXT NOT NULL,
+    partner_name TEXT NOT NULL DEFAULT '',
+    amount BIGINT NOT NULL DEFAULT 0,
+    days INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS bids_job_idx ON bids (job_code)`,
+  `CREATE INDEX IF NOT EXISTS bids_partner_idx ON bids (partner_code)`,
+  // ---- Phase 6: partner reviews (src/lib/reviews.ts) ----
+  `CREATE TABLE IF NOT EXISTS reviews (
+    id TEXT PRIMARY KEY,
+    partner_code TEXT NOT NULL,
+    customer_name TEXT NOT NULL DEFAULT '',
+    rating INTEGER NOT NULL DEFAULT 5,
+    text TEXT NOT NULL DEFAULT '',
+    ref_code TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Published',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS reviews_partner_idx ON reviews (partner_code)`,
+  // ---- Phase 6: notifications log (src/lib/notify.ts) ----
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    audience TEXT NOT NULL DEFAULT 'admin',
+    ref_code TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT 'inapp',
+    template_key TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'logged',
+    phone TEXT,
+    email TEXT,
+    detail TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS notifications_created_idx ON notifications (created_at DESC)`
 ];
 var SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";
 
@@ -2798,7 +2887,7 @@ var setup_default = wrap(async (req, res) => {
     await dbQuery(stmt);
     done.push(stmt.replace(/\s+/g, " ").slice(0, 60));
   }
-  return sendJson(res, 200, { ok: true, statementsApplied: done.length, tables: ["users", "partners", "leads", "bookings", "orders", "quotes", "payments", "settings", "offers"] });
+  return sendJson(res, 200, { ok: true, statementsApplied: done.length, tables: ["users", "partners", "leads", "bookings", "orders", "quotes", "payments", "settings", "offers", "jobs", "bids", "reviews", "notifications"] });
 });
 
 // server/handlers/auth/register.ts
@@ -2949,6 +3038,62 @@ function quoteFromRow(r) {
     boqSummary: r.boq_summary ?? void 0,
     status: r.status,
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt
+  };
+}
+function jobFromRow(r, opts = {}) {
+  return {
+    code: r.code,
+    title: r.title,
+    trade: r.trade,
+    description: r.description,
+    location: r.location,
+    budgetLow: Number(r.budget_low) || 0,
+    budgetHigh: Number(r.budget_high) || 0,
+    customerName: r.customer_name,
+    customerPhone: opts.publicSafe ? "" : r.customer_phone,
+    sourceQuoteCode: r.source_quote_code ?? void 0,
+    status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt
+  };
+}
+function bidFromRow(r) {
+  return {
+    id: r.id,
+    jobCode: r.job_code,
+    partnerCode: r.partner_code,
+    partnerName: r.partner_name,
+    amount: Number(r.amount) || 0,
+    days: Number(r.days) || 0,
+    note: r.note,
+    status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt
+  };
+}
+function reviewFromRow(r) {
+  return {
+    id: r.id,
+    partnerCode: r.partner_code,
+    customerName: r.customer_name,
+    rating: Number(r.rating) || 0,
+    text: r.text,
+    refCode: r.ref_code,
+    status: r.status,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt
+  };
+}
+function notificationFromRow(r) {
+  return {
+    id: r.id,
+    ts: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+    audience: r.audience,
+    refCode: r.ref_code,
+    channel: r.channel,
+    templateKey: r.template_key,
+    message: r.message,
+    status: r.status,
+    phone: r.phone ?? void 0,
+    email: r.email ?? void 0,
+    detail: r.detail ?? void 0
   };
 }
 function offerFromRow(r) {
@@ -3235,7 +3380,15 @@ var settings_default = wrap(async (req, res) => {
     if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
     if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
     const b = await readJson(req);
-    const value = { partnerTerms: b.partnerTerms || void 0, rates: b.rates || void 0, business: b.business || void 0 };
+    const value = {
+      partnerTerms: b.partnerTerms || void 0,
+      rates: b.rates || void 0,
+      business: b.business || void 0,
+      plans: b.plans || void 0,
+      coupons: b.coupons || void 0,
+      promoBanner: b.promoBanner || void 0,
+      priceWatch: b.priceWatch || void 0
+    };
     await dbQuery(
       `INSERT INTO settings (key, value, updated_at) VALUES ('site', $1::jsonb, now())
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
@@ -3327,18 +3480,357 @@ var webhook_default = wrap(async (req, res) => {
   }
   return sendJson(res, 200, { received: true });
 });
+
+// server/handlers/jobs.ts
+var JOB_STATUSES = ["Open", "Awarded", "In Progress", "Completed", "Closed"];
+var jobs_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method === "POST") {
+    const b = await readJson(req);
+    const code = String(b.code || "").trim().toUpperCase();
+    if (!code || String(b.title || "").trim().length < 3) return sendJson(res, 400, { error: "Missing job code or title" });
+    if (String(b.customerName || "").trim().length < 2) return sendJson(res, 400, { error: "Missing customer name" });
+    if (String(b.customerPhone || "").replace(/\D/g, "").length < 10) return sendJson(res, 400, { error: "Missing customer phone" });
+    const rows = await dbQuery(
+      `INSERT INTO jobs (code, title, trade, description, location, budget_low, budget_high, customer_name, customer_phone, source_quote_code, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'Open') RETURNING *`,
+      [
+        code,
+        b.title,
+        b.trade || "General",
+        b.description || "",
+        b.location || "",
+        Math.max(0, Math.round(Number(b.budgetLow) || 0)),
+        Math.max(0, Math.round(Number(b.budgetHigh) || 0)),
+        b.customerName,
+        b.customerPhone,
+        b.sourceQuoteCode || null
+      ]
+    );
+    return sendJson(res, 201, { job: jobFromRow(rows[0]) });
+  }
+  if (req.method === "GET") {
+    const code = String(req.query?.code || "").trim().toUpperCase();
+    const phone = String(req.query?.phone || "").replace(/\D/g, "");
+    if (code) {
+      const rows2 = await dbQuery(`SELECT * FROM jobs WHERE code = $1`, [code]);
+      if (!rows2.length) return sendJson(res, 404, { error: "Job not found" });
+      const ownPhone = phone && rows2[0].customer_phone.replace(/\D/g, "").endsWith(phone.slice(-10));
+      const full = ownPhone || await isAdmin(req);
+      const bids = await dbQuery(`SELECT * FROM bids WHERE job_code = $1 ORDER BY created_at ASC`, [code]);
+      return sendJson(res, 200, { job: jobFromRow(rows2[0], { publicSafe: !full }), bids: bids.map(bidFromRow) });
+    }
+    if (phone) {
+      const rows2 = await dbQuery(`SELECT * FROM jobs WHERE regexp_replace(customer_phone, '[^0-9]', '', 'g') LIKE '%' || $1 ORDER BY created_at DESC`, [phone.slice(-10)]);
+      return sendJson(res, 200, { jobs: rows2.map((r) => jobFromRow(r)) });
+    }
+    if (await isAdmin(req) && String(req.query?.all || "") === "1") {
+      const rows2 = await dbQuery(`SELECT * FROM jobs ORDER BY created_at DESC LIMIT 500`);
+      return sendJson(res, 200, { jobs: rows2.map((r) => jobFromRow(r)) });
+    }
+    const rows = await dbQuery(`SELECT * FROM jobs WHERE status = 'Open' ORDER BY created_at DESC LIMIT 200`);
+    const counts = await dbQuery(`SELECT job_code, COUNT(*)::int AS n FROM bids GROUP BY job_code`);
+    const countMap = new Map(counts.map((c) => [c.job_code, Number(c.n)]));
+    return sendJson(res, 200, { jobs: rows.map((r) => ({ ...jobFromRow(r, { publicSafe: true }), bidsCount: countMap.get(r.code) || 0 })) });
+  }
+  if (req.method === "PATCH") {
+    if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+    const b = await readJson(req);
+    const code = String(b.code || "").trim().toUpperCase();
+    if (!code || !JOB_STATUSES.includes(b.status)) return sendJson(res, 400, { error: "Missing code or bad status" });
+    const rows = await dbQuery(`UPDATE jobs SET status = $1 WHERE code = $2 RETURNING *`, [b.status, code]);
+    if (!rows.length) return sendJson(res, 404, { error: "Job not found" });
+    return sendJson(res, 200, { job: jobFromRow(rows[0]) });
+  }
+  return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
+});
+
+// server/handlers/jobs/bid.ts
+var bid_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method === "GET") {
+    const jobCode = String(req.query?.jobCode || "").trim().toUpperCase();
+    const partnerCode = String(req.query?.partnerCode || "").trim().toUpperCase();
+    if (jobCode) {
+      const rows = await dbQuery(`SELECT * FROM bids WHERE job_code = $1 ORDER BY created_at ASC`, [jobCode]);
+      return sendJson(res, 200, { bids: rows.map(bidFromRow) });
+    }
+    if (partnerCode) {
+      const rows = await dbQuery(`SELECT * FROM bids WHERE partner_code = $1 ORDER BY created_at DESC`, [partnerCode]);
+      return sendJson(res, 200, { bids: rows.map(bidFromRow) });
+    }
+    return sendJson(res, 400, { error: "Pass jobCode or partnerCode" });
+  }
+  if (req.method === "POST") {
+    const b = await readJson(req);
+    const jobCode = String(b.jobCode || "").trim().toUpperCase();
+    const partnerCode = String(b.partnerCode || "").trim().toUpperCase();
+    const amount = Math.round(Number(b.amount) || 0);
+    if (!jobCode || !partnerCode || amount <= 0) return sendJson(res, 400, { error: "Missing job, partner or bid amount" });
+    const jrows = await dbQuery(`SELECT status FROM jobs WHERE code = $1`, [jobCode]);
+    if (!jrows.length) return sendJson(res, 404, { error: "Job not found" });
+    if (jrows[0].status !== "Open") return sendJson(res, 409, { error: "Job is not open for bids" });
+    const prow = await dbQuery(`SELECT business_name, status FROM partners WHERE code = $1`, [partnerCode]);
+    if (!prow.length) return sendJson(res, 404, { error: "Partner not found" });
+    if (prow[0].status !== "approved") return sendJson(res, 403, { error: "Only approved partners can bid" });
+    const days = Math.max(0, Math.round(Number(b.days) || 0));
+    const existing = await dbQuery(`SELECT * FROM bids WHERE job_code = $1 AND partner_code = $2 AND status = 'Pending'`, [jobCode, partnerCode]);
+    if (existing.length) {
+      const rows2 = await dbQuery(
+        `UPDATE bids SET amount = $1, days = $2, note = $3 WHERE id = $4 RETURNING *`,
+        [amount, days, b.note || "", existing[0].id]
+      );
+      return sendJson(res, 200, { bid: bidFromRow(rows2[0]), updated: true });
+    }
+    const id = `BID-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const rows = await dbQuery(
+      `INSERT INTO bids (id, job_code, partner_code, partner_name, amount, days, note, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'Pending') RETURNING *`,
+      [id, jobCode, partnerCode, prow[0].business_name, amount, days, b.note || ""]
+    );
+    return sendJson(res, 201, { bid: bidFromRow(rows[0]) });
+  }
+  return methodNotAllowed(res, ["GET", "POST"]);
+});
+
+// server/handlers/jobs/award.ts
+var award_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
+  const b = await readJson(req);
+  const jobCode = String(b.jobCode || "").trim().toUpperCase();
+  const bidId = String(b.bidId || "").trim();
+  if (!jobCode || !bidId) return sendJson(res, 400, { error: "Missing jobCode or bidId" });
+  const jrows = await dbQuery(`SELECT * FROM jobs WHERE code = $1`, [jobCode]);
+  if (!jrows.length) return sendJson(res, 404, { error: "Job not found" });
+  const job = jrows[0];
+  if (job.status !== "Open") return sendJson(res, 409, { error: "Job is not open" });
+  const brows = await dbQuery(`SELECT * FROM bids WHERE id = $1 AND job_code = $2`, [bidId, jobCode]);
+  if (!brows.length) return sendJson(res, 404, { error: "Bid not found for this job" });
+  const bid = brows[0];
+  if (bid.status !== "Pending") return sendJson(res, 409, { error: "Bid is not pending" });
+  await dbQuery(`UPDATE bids SET status = 'Rejected' WHERE job_code = $1 AND status = 'Pending' AND id <> $2`, [jobCode, bidId]);
+  const winRows = await dbQuery(`UPDATE bids SET status = 'Accepted' WHERE id = $1 RETURNING *`, [bidId]);
+  const jobRows = await dbQuery(`UPDATE jobs SET status = 'Awarded' WHERE code = $1 RETURNING *`, [jobCode]);
+  const terms = await getServerPartnerTerms();
+  const est = Math.max(0, Math.round(Number(bid.amount) || 0));
+  const leadId = `LED-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const leadRows = await dbQuery(
+    `INSERT INTO leads (id, partner_code, partner_name, type, customer_name, customer_phone, description, est_value_ngn, commission_pct, commission_ngn, status)
+     VALUES ($1,$2,$3,'job',$4,$5,$6,$7,$8,$9,'new') RETURNING *`,
+    [
+      leadId,
+      bid.partner_code,
+      bid.partner_name,
+      job.customer_name,
+      job.customer_phone,
+      `Won bid on job ${jobCode} \u2014 ${job.title}`,
+      est,
+      terms.referralCommissionPct,
+      commissionForValue(est, terms.referralCommissionPct)
+    ]
+  );
+  const allBids = await dbQuery(`SELECT * FROM bids WHERE job_code = $1 ORDER BY created_at ASC`, [jobCode]);
+  return sendJson(res, 200, { job: jobFromRow(jobRows[0]), bids: allBids.map(bidFromRow), bid: bidFromRow(winRows[0]), lead: leadFromRow(leadRows[0]) });
+});
+
+// server/handlers/reviews.ts
+var reviews_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method === "POST") {
+    const b = await readJson(req);
+    const partnerCode = String(b.partnerCode || "").trim().toUpperCase();
+    const rating = Math.round(Number(b.rating) || 0);
+    if (!partnerCode) return sendJson(res, 400, { error: "Missing partner code" });
+    if (String(b.customerName || "").trim().length < 2) return sendJson(res, 400, { error: "Missing your name" });
+    if (rating < 1 || rating > 5) return sendJson(res, 400, { error: "Rating must be 1\u20135" });
+    if (String(b.refCode || "").trim().length < 3) return sendJson(res, 400, { error: "A reference code (lead, order or job) is required" });
+    const prow = await dbQuery(`SELECT code FROM partners WHERE code = $1`, [partnerCode]);
+    if (!prow.length) return sendJson(res, 404, { error: "Partner not found" });
+    const id = `REV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const rows = await dbQuery(
+      `INSERT INTO reviews (id, partner_code, customer_name, rating, text, ref_code, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'Published') RETURNING *`,
+      [id, partnerCode, b.customerName, rating, b.text || "", String(b.refCode).trim().toUpperCase()]
+    );
+    return sendJson(res, 201, { review: reviewFromRow(rows[0]) });
+  }
+  if (req.method === "GET") {
+    const partnerCode = String(req.query?.partnerCode || "").trim().toUpperCase();
+    if (partnerCode) {
+      const rows2 = await dbQuery(`SELECT * FROM reviews WHERE partner_code = $1 AND status = 'Published' ORDER BY created_at DESC LIMIT 200`, [partnerCode]);
+      const reviews = rows2.map(reviewFromRow);
+      const count = reviews.length;
+      const avg = count ? Math.round(reviews.reduce((s, r) => s + r.rating, 0) / count * 10) / 10 : 0;
+      return sendJson(res, 200, { reviews, summary: { avg, count } });
+    }
+    if (String(req.query?.all || "") === "published") {
+      const rows2 = await dbQuery(`SELECT * FROM reviews WHERE status = 'Published' ORDER BY created_at DESC LIMIT 1000`);
+      return sendJson(res, 200, { reviews: rows2.map(reviewFromRow) });
+    }
+    if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+    const rows = await dbQuery(`SELECT * FROM reviews ORDER BY created_at DESC LIMIT 500`);
+    return sendJson(res, 200, { reviews: rows.map(reviewFromRow) });
+  }
+  if (req.method === "PATCH" || req.method === "DELETE") {
+    if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+    if (req.method === "DELETE") {
+      const id = String(req.query?.id || "");
+      if (!id) return sendJson(res, 400, { error: "Missing review id" });
+      await dbQuery(`DELETE FROM reviews WHERE id = $1`, [id]);
+      return sendJson(res, 200, { ok: true });
+    }
+    const b = await readJson(req);
+    if (!b.id || !["Published", "Hidden"].includes(b.status)) return sendJson(res, 400, { error: "Missing id or bad status" });
+    const rows = await dbQuery(`UPDATE reviews SET status = $1 WHERE id = $2 RETURNING *`, [b.status, b.id]);
+    if (!rows.length) return sendJson(res, 404, { error: "Review not found" });
+    return sendJson(res, 200, { review: reviewFromRow(rows[0]) });
+  }
+  return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
+});
+
+// server/handlers/notifications.ts
+var AUDIENCES = ["admin", "customer", "partner"];
+var CHANNELS = ["whatsapp", "sms", "email", "inapp"];
+var STATUSES = ["queued", "sent", "logged"];
+var notifications_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method === "POST") {
+    const b = await readJson(req);
+    if (String(b.message || "").trim().length < 3) return sendJson(res, 400, { error: "Missing message" });
+    const id = /^NTF-[A-Z0-9-]{4,}$/i.test(String(b.id || "")) ? String(b.id).toUpperCase() : `NTF-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const status = STATUSES.includes(b.status) ? b.status : "logged";
+    const rows = await dbQuery(
+      `INSERT INTO notifications (id, audience, ref_code, channel, template_key, message, status, phone, email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status
+       RETURNING *`,
+      [
+        id,
+        AUDIENCES.includes(b.audience) ? b.audience : "admin",
+        b.refCode || "",
+        CHANNELS.includes(b.channel) ? b.channel : "inapp",
+        b.templateKey || "",
+        b.message,
+        status,
+        b.phone || null,
+        b.email || null
+      ]
+    );
+    return sendJson(res, 201, { notification: notificationFromRow(rows[0]) });
+  }
+  if (req.method === "GET") {
+    if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+    const rows = await dbQuery(`SELECT * FROM notifications ORDER BY created_at DESC LIMIT 500`);
+    return sendJson(res, 200, { notifications: rows.map(notificationFromRow) });
+  }
+  if (req.method === "PATCH") {
+    if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+    const b = await readJson(req);
+    if (!b.id || !STATUSES.includes(b.status)) return sendJson(res, 400, { error: "Missing id or bad status" });
+    const rows = await dbQuery(`UPDATE notifications SET status = $1 WHERE id = $2 RETURNING *`, [b.status, b.id]);
+    if (!rows.length) return sendJson(res, 404, { error: "Notification not found" });
+    return sendJson(res, 200, { notification: notificationFromRow(rows[0]) });
+  }
+  return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
+});
+
+// server/handlers/notifications/dispatch.ts
+function smsConfigured() {
+  return !!(process.env.TERMII_API_KEY || "").trim();
+}
+function emailConfigured() {
+  return !!(process.env.RESEND_API_KEY || "").trim();
+}
+async function sendSms(rec) {
+  const to = String(rec.phone || "").replace(/\D/g, "");
+  if (!to) return { ok: false, detail: "No phone number on the record" };
+  try {
+    const r = await fetch("https://api.ng.termii.com/api/sms/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to,
+        from: process.env.TERMII_SENDER_ID || "Oketex",
+        sms: rec.message,
+        type: "plain",
+        channel: "generic",
+        api_key: process.env.TERMII_API_KEY
+      })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && (j.code === "ok" || j.message_id || j.messageId)) return { ok: true, detail: `Termii accepted (${j.message_id || j.messageId || "ok"})` };
+    return { ok: false, detail: `Termii responded ${r.status}: ${String(j.message || j.detail || "").slice(0, 160)}` };
+  } catch (e) {
+    return { ok: false, detail: `Termii request failed: ${String(e?.message || e).slice(0, 160)}` };
+  }
+}
+async function sendEmail(rec) {
+  const to = String(rec.email || "").trim();
+  if (!to) return { ok: false, detail: "No email address on the record" };
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM || "Oketex <onboarding@resend.dev>",
+        to,
+        subject: `Oketex & Sons \u2014 update on ${rec.ref_code || "your request"}`,
+        text: rec.message
+      })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.id) return { ok: true, detail: `Resend accepted (${j.id})` };
+    return { ok: false, detail: `Resend responded ${r.status}: ${String(j.message || "").slice(0, 160)}` };
+  } catch (e) {
+    return { ok: false, detail: `Resend request failed: ${String(e?.message || e).slice(0, 160)}` };
+  }
+}
+var dispatch_default = wrap(async (req, res) => {
+  if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
+  if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
+  if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
+  const sms = smsConfigured(), email = emailConfigured();
+  if (!sms && !email) {
+    return sendJson(res, 200, { enabled: false, sms, email, attempted: 0, sent: 0, results: [], note: "No provider keys configured (TERMII_API_KEY / RESEND_API_KEY) \u2014 records stay logged." });
+  }
+  const b = await readJson(req);
+  const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x)) : [];
+  const rows = ids.length ? await dbQuery(`SELECT * FROM notifications WHERE id = ANY($1) AND channel IN ('sms','email') AND status <> 'sent'`, [ids]) : await dbQuery(`SELECT * FROM notifications WHERE channel IN ('sms','email') AND status <> 'sent' ORDER BY created_at ASC LIMIT 100`);
+  const results = [];
+  let sent = 0;
+  for (const rec of rows) {
+    const can = rec.channel === "sms" ? sms : email;
+    if (!can) {
+      results.push({ id: rec.id, skipped: true, detail: `No ${rec.channel} provider configured` });
+      continue;
+    }
+    const out = rec.channel === "sms" ? await sendSms(rec) : await sendEmail(rec);
+    const next = out.ok ? "sent" : rec.status;
+    if (out.ok) sent++;
+    const upd = await dbQuery(`UPDATE notifications SET status = $1, detail = $2 WHERE id = $3 RETURNING *`, [next, out.detail, rec.id]);
+    results.push({ id: rec.id, sent: out.ok, detail: out.detail, notification: notificationFromRow(upd[0]) });
+  }
+  return sendJson(res, 200, { enabled: true, sms, email, attempted: rows.length, sent, results });
+});
 export {
   SCHEMA_SQL,
   SCHEMA_STATEMENTS,
   partners_default2 as adminPartners,
+  assist_default as aiAssist,
   auth_exports as authLib,
   bookings_default as bookings,
   dbQuery,
   health_default as health,
+  jobs_default as jobs,
+  award_default as jobsAward,
+  bid_default as jobsBid,
   leads_default as leads,
   login_default as login,
   logout_default as logout,
   me_default as me,
+  notifications_default as notifications,
+  dispatch_default as notificationsDispatch,
   offers_default as offers,
   orders_default as orders,
   code_default as partnerByCode,
@@ -3347,6 +3839,7 @@ export {
   paystack_exports as paystackLib,
   quotes_default as quotes,
   register_default as register,
+  reviews_default as reviews,
   settings_default as settings,
   setup_default as setup,
   webhook_default as webhook
