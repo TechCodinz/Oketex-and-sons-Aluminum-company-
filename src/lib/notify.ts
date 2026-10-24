@@ -21,11 +21,12 @@ export interface NotificationRecord {
 export type NotifyTemplateKey =
   | "booking_created" | "lead_created_admin" | "lead_created_partner"
   | "verify_requested" | "invoice_sent" | "order_placed"
-  | "job_posted" | "bid_accepted";
+  | "job_posted" | "bid_accepted"
+  | "snap_received" | "snap_priced" | "snap_assigned_partner" | "snap_assigned_customer" | "snap_completed";
 export interface NotifyVars {
   business?: string; code?: string; amount?: string; total?: string; balance?: string;
   name?: string; phone?: string; partner?: string; service?: string; date?: string;
-  due?: string; title?: string;
+  due?: string; title?: string; address?: string;
 }
 /** Every template in ONE place. Merge fields: {business} {code} {amount}
  *  {total} {balance} {name} {phone} {partner} {service} {date} {due} {title}. */
@@ -38,6 +39,11 @@ export const NOTIFY_TEMPLATES: Record<NotifyTemplateKey, string> = {
   order_placed: "New order {code} at {business}: {name} ({phone}) — total {amount}. See Admin → Orders.",
   job_posted: "New job posted {code} at {business}: \"{title}\" by {name} ({phone}). Approved pros can bid on the Jobs board.",
   bid_accepted: "Hello {partner}, your bid was accepted for job {code} via {business}. Customer: {name}, {phone}. A tracked network lead has been created for you.",
+  snap_received: "New Snap & Send request {code} at {business}: {name} ({phone}) sent a {title}. See Admin → Snap & Send to review and price it.",
+  snap_priced: "Hello {name}, {business} has priced your Snap & Send request {code}: total {amount}. Open Track on our site, enter your code, review the breakdown and approve to proceed.",
+  snap_assigned_partner: "Hello {partner}, you have been assigned Snap & Send job {code} via {business} at the agreed price {amount}. Customer: {name}, {phone}. Site: {address}. Open Partner Status to see the map and post progress updates.",
+  snap_assigned_customer: "Hello {name}, good news — {business} assigned {partner} to your Snap & Send job {code} at the agreed price {amount}. Follow progress in Track on our site.",
+  snap_completed: "Snap & Send job {code} at {business} was marked complete by {partner}. Customer: {name} ({phone}). Please confirm with the customer.",
 };
 export function renderTemplate(key: NotifyTemplateKey, vars: NotifyVars): string {
   const tpl = NOTIFY_TEMPLATES[key] || "";

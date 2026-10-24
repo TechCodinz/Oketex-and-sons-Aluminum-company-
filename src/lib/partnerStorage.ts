@@ -15,8 +15,13 @@ export interface Partner {
   yearsExperience?: number; cacNumber?: string; bio: string;
   products: PartnerProduct[];
   status: PartnerStatus; verified: boolean; featured: boolean; sample?: boolean;
+  /** Snap & Send: is this partner open to job assignments? Default true —
+   *  absent means available (records created before the field existed). */
+  available?: boolean;
   createdAt: string;
 }
+/** Availability for Snap & Send assignments — defaults to true. */
+export function partnerAvailable(p: Partner): boolean { return p.available !== false; }
 export interface Lead {
   id: string; partnerCode: string; partnerName: string; type: LeadType;
   customerName: string; customerPhone: string; description: string;
@@ -187,7 +192,16 @@ export async function addPartnerAsync(p: Partner): Promise<void> {
 export async function updatePartnerAsync(code: string, patch: Partial<Partner>): Promise<void> {
   updatePartner(code, patch);
   if (await probeApi()) {
-    try { await apiFetch("/api/admin/partners", { method: "PATCH", body: JSON.stringify({ code, status: patch.status, verified: patch.verified, featured: patch.featured }) }); }
+    try { await apiFetch("/api/admin/partners", { method: "PATCH", body: JSON.stringify({ code, status: patch.status, verified: patch.verified, featured: patch.featured, available: patch.available }) }); }
+    catch { /* local stands */ }
+  }
+}
+/** Partner self-service availability toggle (Snap & Send). Local first,
+ *  then the phone-proofed PATCH /api/partners when the backend is live. */
+export async function setPartnerAvailabilityAsync(code: string, phone: string, available: boolean): Promise<void> {
+  updatePartner(code, { available });
+  if (await probeApi()) {
+    try { await apiFetch("/api/partners", { method: "PATCH", body: JSON.stringify({ code, phone, available }) }); }
     catch { /* local stands */ }
   }
 }

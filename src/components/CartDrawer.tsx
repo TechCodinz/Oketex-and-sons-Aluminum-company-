@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Minus, Plus, Trash2, ArrowRight, TicketPercent, X } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { formatNGN, formatUSD } from "@/lib/money";
-import { getAppliedCouponCode, setAppliedCouponCode, validateCoupon } from "@/lib/settings";
+import { getAppliedCouponCode, setAppliedCouponCode, validateCoupon, getRates, getDeliveryZoneId, setDeliveryZoneId, dispatchFor, orderGrandTotal } from "@/lib/settings";
+import { DELIVERY_ZONES } from "@/lib/roofEngine";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,14 @@ export function CartDrawer() {
   // minimum spend, the discount simply stops applying (never an error wall).
   const check = appliedCode ? validateCoupon(appliedCode, totalNgn) : null;
   const discountNgn = check?.ok ? check.discountNgn : 0;
+  // Delivery method + dispatch & handling (Snap & Send): the zone choice is
+  // persisted and shared with Checkout so both totals always agree.
+  const rates = getRates();
+  const [zoneId, setZoneId] = useState(() => getDeliveryZoneId());
+  const deliveryNgn = rates.deliveryZones[zoneId] ?? 0;
+  const dispatchNgn = dispatchFor(rates.dispatchFeeNgn, zoneId);
+  const grandTotal = orderGrandTotal(totalNgn - discountNgn, deliveryNgn, rates.dispatchFeeNgn, zoneId);
+  const zoneLabel = (id: string) => DELIVERY_ZONES.find(z => z.id === id)?.label || id;
   const applyCoupon = () => {
     const r = validateCoupon(couponInput, totalNgn);
     if (!r.ok) return toast.error(r.error);
@@ -143,14 +152,26 @@ export function CartDrawer() {
                 <div className="flex justify-between font-tech text-xs text-emerald-400"><span>Coupon discount</span><span>−{formatNGN(discountNgn)}</span></div>
               </div>
             )}
+            <div>
+              <label className="font-tech text-[11px] uppercase tracking-widest text-muted-foreground block mb-1.5" htmlFor="cart-zone">Delivery method</label>
+              <select id="cart-zone" value={zoneId} onChange={e => { setZoneId(e.target.value); setDeliveryZoneId(e.target.value); }} className="w-full bg-background border hairline font-tech text-sm px-3 py-2.5 cursor-pointer">
+                {DELIVERY_ZONES.map(z => (<option key={z.id} value={z.id}>{z.id === "pickup" ? "Pickup from Ibafo — Free" : `${z.label} — ${formatNGN(rates.deliveryZones[z.id] ?? z.price)}`}</option>))}
+              </select>
+            </div>
+            {(deliveryNgn > 0 || dispatchNgn > 0) && (
+              <div className="space-y-1">
+                {deliveryNgn > 0 && <div className="flex justify-between font-tech text-xs text-muted-foreground"><span>Delivery ({zoneLabel(zoneId)})</span><span>{formatNGN(deliveryNgn)}</span></div>}
+                {dispatchNgn > 0 && <div className="flex justify-between font-tech text-xs text-muted-foreground"><span>Dispatch &amp; handling</span><span>{formatNGN(dispatchNgn)}</span></div>}
+              </div>
+            )}
             <div className="flex items-baseline justify-between">
               <span className="label-tech">Total</span>
               <div className="text-right">
                 <div className="font-display font-bold text-2xl text-primary">
-                  {formatNGN(totalNgn - discountNgn)}
+                  {formatNGN(grandTotal)}
                 </div>
                 <div className="font-tech text-[11px] text-muted-foreground">
-                  {formatUSD(totalNgn - discountNgn)} · delivery calculated at confirmation
+                  {formatUSD(grandTotal)} · final delivery timing confirmed by the office
                 </div>
               </div>
             </div>

@@ -173,5 +173,25 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `CREATE INDEX IF NOT EXISTS notifications_created_idx ON notifications (created_at DESC)`,
+  // ---- Snap & Send jobs (src/lib/snapRequests.ts) ----
+  // The full request record (photo/poster dataURLs, assessment, timeline)
+  // lives in `data` jsonb; columns carry the queryable/commission fields.
+  `CREATE TABLE IF NOT EXISTS snap_requests (
+    code TEXT PRIMARY KEY,
+    intent TEXT NOT NULL DEFAULT 'fix',
+    status TEXT NOT NULL DEFAULT 'Received',
+    customer_name TEXT NOT NULL DEFAULT '',
+    customer_phone TEXT NOT NULL DEFAULT '',
+    assigned_partner_code TEXT,
+    total_ngn INTEGER NOT NULL DEFAULT 0,
+    agreed_price_ngn INTEGER,
+    commission_pct NUMERIC,
+    commission_ngn INTEGER,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS snap_requests_partner_idx ON snap_requests (assigned_partner_code)`,
+  `CREATE INDEX IF NOT EXISTS snap_requests_created_idx ON snap_requests (created_at DESC)`,
 ];
 export const SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";

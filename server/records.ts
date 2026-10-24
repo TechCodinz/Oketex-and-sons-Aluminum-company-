@@ -58,6 +58,26 @@ export function jobFromRow(r: any, opts: { publicSafe?: boolean } = {}): any {
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
   };
 }
+export function snapRequestFromRow(r: any, opts: { publicSafe?: boolean } = {}): any {
+  // Full record lives in `data` jsonb; columns win where they exist.
+  // Public lookups (code only, no phone proof) never expose the phone.
+  const d = typeof r.data === "string" ? JSON.parse(r.data || "{}") : (r.data || {});
+  return {
+    ...d,
+    code: r.code,
+    intent: r.intent ?? d.intent ?? "fix",
+    status: r.status ?? d.status ?? "Received",
+    customerName: r.customer_name ?? d.customerName ?? "",
+    customerPhone: opts.publicSafe ? "" : (r.customer_phone ?? d.customerPhone ?? ""),
+    assignedPartnerCode: r.assigned_partner_code ?? d.assignedPartnerCode ?? null,
+    totalNgn: Number(r.total_ngn ?? d.totalNgn ?? 0) || 0,
+    agreedPriceNgn: r.agreed_price_ngn == null ? (d.agreedPriceNgn ?? null) : Number(r.agreed_price_ngn),
+    commissionPct: r.commission_pct == null ? (d.commissionPct ?? null) : Number(r.commission_pct),
+    commissionNgn: r.commission_ngn == null ? (d.commissionNgn ?? null) : Number(r.commission_ngn),
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
+  };
+}
 export function bidFromRow(r: any): any {
   return {
     id: r.id, jobCode: r.job_code, partnerCode: r.partner_code, partnerName: r.partner_name,

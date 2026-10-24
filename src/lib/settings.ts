@@ -17,6 +17,10 @@ export interface EffectiveRates {
   /** Delivery price per zone id (ids match DELIVERY_ZONES in roofEngine). */
   deliveryZones: Record<string, number>;
   installationPerM2: number; ridgePerM: number; timberPerM: number;
+  /** Snap & Send: flat dispatch & handling fee for shop orders. 0 = off.
+   *  Charged ONCE per order (never per item) and only when the customer
+   *  picks a paid delivery zone — pickup never pays it. */
+  dispatchFeeNgn: number;
 }
 export interface EffectiveBusiness {
   name: string; shortName: string; phone: string; whatsapp: string; email: string; address: string; hours: string;
@@ -36,7 +40,7 @@ export interface OketexSettings {
   /** Subscription plans (Deliverable F) — full array replaces defaults when set. PlanDef lives in lib/plans.ts. */
   plans?: import("./plans").PlanDef[];
   partnerTerms?: Partial<EffectivePartnerTerms>;
-  rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number };
+  rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number; dispatchFeeNgn?: number };
   business?: Partial<Pick<EffectiveBusiness, "phone" | "whatsapp" | "email" | "address" | "hours">>;
   /** Phase 6 promotions: discount coupons + the site-wide promo banner. */
   coupons?: Coupon[];
@@ -51,6 +55,7 @@ export const DEFAULT_RATES: EffectiveRates = {
   installationPerM2: 2200,
   ridgePerM: 4500,
   timberPerM: 1800,
+  dispatchFeeNgn: 0,
 };
 
 const KEY = "oketex-settings";
@@ -120,6 +125,7 @@ export function getRates(): EffectiveRates {
     installationPerM2: num(o.installationPerM2, DEFAULT_RATES.installationPerM2),
     ridgePerM: num(o.ridgePerM, DEFAULT_RATES.ridgePerM),
     timberPerM: num(o.timberPerM, DEFAULT_RATES.timberPerM),
+    dispatchFeeNgn: num(o.dispatchFeeNgn, DEFAULT_RATES.dispatchFeeNgn),
   };
 }
 export function getBusiness(): EffectiveBusiness {
@@ -174,6 +180,29 @@ export function getAppliedCouponCode(): string {
 }
 export function setAppliedCouponCode(code: string) {
   try { if (code) localStorage.setItem(APPLIED_COUPON_KEY, code); else localStorage.removeItem(APPLIED_COUPON_KEY); } catch { /* ignore */ }
+}
+
+// ---- Snap & Send: shop-order delivery selection + dispatch fee ----
+// The cart drawer and checkout share ONE persisted delivery-zone choice so
+// the totals the customer sees in the drawer match checkout exactly.
+const DELIVERY_ZONE_KEY = "oketex-delivery-zone";
+export function getDeliveryZoneId(): string {
+  try { const z = localStorage.getItem(DELIVERY_ZONE_KEY) || "pickup"; return (DELIVERY_ZONE_IDS as readonly string[]).includes(z) ? z : "pickup"; } catch { return "pickup"; }
+}
+export function setDeliveryZoneId(id: string) {
+  try { localStorage.setItem(DELIVERY_ZONE_KEY, id); } catch { /* ignore */ }
+}
+/** The dispatch & handling fee that applies: the configured fee when it is
+ *  switched on (> 0) AND the delivery method is a paid zone (not pickup).
+ *  Flat per order — never multiplied by quantity. */
+export function dispatchFor(dispatchFeeNgn: number, zoneId: string): number {
+  return dispatchFeeNgn > 0 && zoneId !== "pickup" ? dispatchFeeNgn : 0;
+}
+/** Grand total for a shop order: discounted items total + zone delivery +
+ *  dispatch (when it applies). Fixture: 100,000 + 45,000 (ogun-lagos) +
+ *  3,000 dispatch = 148,000; pickup adds no dispatch line. */
+export function orderGrandTotal(afterDiscountNgn: number, deliveryNgn: number, dispatchFeeNgn: number, zoneId: string): number {
+  return afterDiscountNgn + deliveryNgn + dispatchFor(dispatchFeeNgn, zoneId);
 }
 /** What is currently overridden vs default — for the Settings tab summary. */
 export function overrideSummary(): string[] {

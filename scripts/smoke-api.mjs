@@ -78,7 +78,7 @@ check(`statements applied == SCHEMA_STATEMENTS (${api.SCHEMA_STATEMENTS.length})
 // limitation), so instead of a second setup call we assert the outcome a
 // re-run must preserve: all 9 tables exist and stay writable.
 const tbl = await api.dbQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-check("all 13 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
+check("all 14 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
 
 // ---------- 2. Health ----------
 console.log("\n[2] GET /api/health");
@@ -263,6 +263,45 @@ r = await call(api.notifications, { method: "GET", headers: { cookie: adminCooki
 check("record stays queued/logged after no-provider dispatch", (r.json?.notifications || []).find(n => n.id === "NTF-SMOKE1")?.status === "queued");
 r = await call(api.aiAssist, { method: "POST", body: { imageDataUrl: "data:image/png;base64,AAAA" } });
 check("AI assist without env → {enabled:false}", r.status === 200 && r.json?.enabled === false, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+
+// ---------- 13. Snap & Send (create → assess → approve → assign → partner flow) ----------
+console.log("\n[13] Snap & Send — create, privacy, assess totals, unapproved assign 400, commission on AGREED price, partner progress");
+r = await call(api.snapRequests, { method: "POST", body: { code: "SR-2026-SMOKE", intent: "fix", mediaType: "photo", photo: null, videoPoster: null, videoNote: "", description: "Roof leaking at the ridge over the sitting room", address: "12 Test Street, Ibafo, Ogun State", geo: { lat: 6.7349, lng: 3.4274 }, customerName: "Snap Tester", customerPhone: "08035556666", urgency: "Urgent" } });
+check("snap request created (201, Received)", r.status === 201 && r.json?.request?.status === "Received", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.snapRequests, { method: "GET", query: { code: "SR-2026-SMOKE" } });
+check("code lookup without phone proof strips the phone", r.json?.request?.customerPhone === "", r.raw.slice(0, 160));
+check("geo round-trips through storage", r.json?.request?.geo?.lat === 6.7349 && r.json?.request?.geo?.lng === 3.4274, r.raw.slice(0, 160));
+r = await call(api.snapRequests, { method: "GET", query: { code: "SR-2026-SMOKE", phone: "08035556666" } });
+check("phone proof reveals the phone", r.json?.request?.customerPhone === "08035556666", r.raw.slice(0, 160));
+const snapAssessment = { items: [{ name: "Longspan sheet 0.45mm", qty: 2, unitPrice: 6500 }], workmanshipNgn: 25000, transportNgn: 8000, dispatchNgn: 2500, notes: "Ridge repair" };
+r = await call(api.snapAssess, { method: "POST", body: { code: "SR-2026-SMOKE", assessment: snapAssessment } });
+check("assess without admin rejected (401)", r.status === 401, `got ${r.status}`);
+r = await call(api.snapAssess, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SR-2026-SMOKE", assessment: snapAssessment } });
+check("assess → Priced, server total ₦48,500 (13,000 + 25,000 + 8,000 + 2,500)", r.status === 200 && r.json?.request?.status === "Priced" && r.json?.request?.totalNgn === 48500, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+await call(api.partners, { method: "POST", body: { ...partnerBody, code: "PRT-2026-PENDING", businessName: "Pending Pros Ltd", email: "pending@partner.test", phone: "08037778888" } });
+r = await call(api.snapAssign, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SR-2026-SMOKE", partnerCode: "PRT-2026-PENDING", agreedPriceNgn: 45000 } });
+check("assigning an UNAPPROVED partner rejected (400)", r.status === 400, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "approve", phone: "08099999999" } });
+check("approve with the wrong phone rejected (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "approve", phone: "08035556666" } });
+check("customer approves → Approved", r.status === 200 && r.json?.request?.status === "Approved", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.settings, { method: "GET" });
+const snapPct = r.json?.settings?.partnerTerms?.referralCommissionPct;
+r = await call(api.snapAssign, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SR-2026-SMOKE", partnerCode: "PRT-2026-SMOKE", agreedPriceNgn: 45000 } });
+check("assign approved partner → Assigned at negotiated ₦45,000", r.status === 200 && r.json?.request?.status === "Assigned" && r.json?.request?.assignedPartnerCode === "PRT-2026-SMOKE" && r.json?.request?.agreedPriceNgn === 45000, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+check("commission snapshot uses AGREED price at effective terms", r.json?.request?.commissionPct === snapPct && r.json?.request?.commissionNgn === Math.round(45000 * snapPct / 100), r.raw.slice(0, 200));
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "progress", partnerCode: "PRT-2026-SMOKE2", text: "Not my job" } });
+check("progress from a non-assigned partner rejected (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "progress", partnerCode: "PRT-2026-SMOKE", text: "On my way to site" } });
+check("assigned partner posts progress (timeline entry lands)", r.status === 200 && (r.json?.request?.timeline || []).some(e => e.text === "On my way to site"), `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "start", partnerCode: "PRT-2026-SMOKE" } });
+check("partner starts the job → In Progress", r.status === 200 && r.json?.request?.status === "In Progress", `got ${r.status}`);
+r = await call(api.snapRequests, { method: "PATCH", body: { code: "SR-2026-SMOKE", action: "complete", partnerCode: "PRT-2026-SMOKE" } });
+check("partner completes the job → Completed", r.status === 200 && r.json?.request?.status === "Completed", `got ${r.status}`);
+r = await call(api.partners, { method: "PATCH", body: { code: "PRT-2026-SMOKE", phone: "08099999999", available: false } });
+check("availability toggle with wrong phone rejected (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.partners, { method: "PATCH", body: { code: "PRT-2026-SMOKE", phone: partnerBody.phone, available: false } });
+check("partner sets own availability off (data jsonb merge)", r.status === 200 && r.json?.partner?.available === false, `got ${r.status}: ${r.raw.slice(0, 160)}`);
 
 console.log(`\nSMOKE RESULT: ${pass} passed, ${fail} failed${fail ? " — failures: " + failures.join("; ") : ""}`);
 process.exit(fail ? 1 : 0);

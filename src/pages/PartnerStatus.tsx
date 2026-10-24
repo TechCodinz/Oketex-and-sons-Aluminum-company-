@@ -4,8 +4,11 @@ import { Link } from "react-router";
 import { BadgeCheck, CreditCard, Inbox, MessageCircle, Package, Search, Star } from "lucide-react";
 import { PageHead, StatusBadge } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { findPartnerAsync, getLeadsForPartnerAsync, getOffersAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
+import { findPartnerAsync, getLeadsForPartnerAsync, getOffersAsync, partnerAvailable, setPartnerAvailabilityAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
 import { getJobsAsync, getPartnerBidsAsync, placeBidAsync, budgetLabel, type Job, type Bid } from "@/lib/jobs";
+import { getSnapRequestsForPartnerAsync, snapProgressAsync, snapPartnerStatusAsync, compressImageFile, SNAP_INTENT_LABEL, type SnapRequest } from "@/lib/snapRequests";
+import { MapCard } from "@/components/MapCard";
+import { notify } from "@/lib/notify";
 import { paymentsApi } from "@/lib/api";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink } from "@/lib/settings";
@@ -22,12 +25,38 @@ export default function PartnerStatus() {
   const [myBids, setMyBids] = useState<Bid[]>([]);
   const [bidForms, setBidForms] = useState<Record<string, { amount: string; days: string; note: string }>>({});
   const [payEmail, setPayEmail] = useState("");
+  const [snapJobs, setSnapJobs] = useState<SnapRequest[]>([]);
+  const [snapForms, setSnapForms] = useState<Record<string, { text: string; photo: string | null }>>({});
+  const loadSnapJobs = async (p: Partner) => setSnapJobs(await getSnapRequestsForPartnerAsync(p.code));
+  const toggleAvailability = async () => {
+    if (!partner) return;
+    const next = !partnerAvailable(partner);
+    await setPartnerAvailabilityAsync(partner.code, partner.phone, next);
+    setPartner({ ...partner, available: next });
+    toast.success(next ? "You are now AVAILABLE for Snap & Send assignments" : "You are now UNAVAILABLE — Oketex will not assign you new Snap & Send jobs");
+  };
+  const postSnapUpdate = async (r: SnapRequest) => {
+    if (!partner) return;
+    const f = snapForms[r.code] ?? { text: "", photo: null };
+    if (!f.text.trim() && !f.photo) { toast.error("Write an update or attach a photo"); return; }
+    await snapProgressAsync(r.code, partner.code, f.text.trim(), f.photo || undefined);
+    setSnapForms({ ...snapForms, [r.code]: { text: "", photo: null } });
+    await loadSnapJobs(partner);
+    toast.success("Update posted — the customer sees it in their tracking page");
+  };
+  const snapStatus = async (r: SnapRequest, action: "start" | "complete") => {
+    if (!partner) return;
+    await snapPartnerStatusAsync(r.code, partner.code, action);
+    if (action === "complete") void notify({ templateKey: "snap_completed", audience: "admin", refCode: r.code, vars: { code: r.code, partner: partner.businessName, name: r.customerName, phone: r.customerPhone } });
+    await loadSnapJobs(partner);
+    toast.success(action === "start" ? "Job started" : "Job marked complete — thank you");
+  };
   // API-first lookup (server record when the backend is live, local otherwise).
   const lookup = async (c: string) => {
     setSearched(c);
     const p = c.trim() ? await findPartnerAsync(c) : undefined;
     setPartner(p);
-    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); return; }
+    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); return; }
     setLeads(await getLeadsForPartnerAsync(p.code));
     if (p.status === "approved") {
       const all = await getOffersAsync();
@@ -35,7 +64,8 @@ export default function PartnerStatus() {
       setOffers(all.filter(o => o.audience === "all" || o.audience === want));
       setOpenJobs(await getJobsAsync());
       setMyBids(await getPartnerBidsAsync(p.code));
-    } else { setOffers([]); setOpenJobs([]); setMyBids([]); }
+      await loadSnapJobs(p);
+    } else { setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); }
   };
   const submitBid = async (job: Job) => {
     if (!partner) return;
@@ -77,7 +107,10 @@ export default function PartnerStatus() {
               <h2 className="font-display font-bold uppercase text-3xl mt-1 flex items-center gap-2">{partner.businessName}{partner.verified && <BadgeCheck className="h-6 w-6 text-primary" />}{partner.featured && <Star className="h-5 w-5 text-primary" />}</h2>
               <p className="font-tech text-xs text-muted-foreground mt-1">{partner.role === "pro" ? `Pro — ${partner.trades.join(", ")}` : `Seller — ${partner.categories.join(", ")}`} · {partner.location}</p>
             </div>
-            <StatusBadge status={partner.status === "approved" ? "delivered" : partner.status === "pending" ? "pending" : "cancelled"} />
+            <div className="flex flex-col items-end gap-2">
+              <StatusBadge status={partner.status === "approved" ? "delivered" : partner.status === "pending" ? "pending" : "cancelled"} />
+              {partner.status === "approved" && (<button onClick={() => void toggleAvailability()} className={`font-tech text-[11px] border px-3 py-2 cursor-pointer ${partnerAvailable(partner) ? "border-emerald-500/60 text-emerald-400" : "hairline text-muted-foreground"}`}>Available for assignments: <b>{partnerAvailable(partner) ? "ON" : "OFF"}</b> — tap to change</button>)}
+            </div>
           </section>
 
           {partner.status === "pending" && (
@@ -108,6 +141,36 @@ export default function PartnerStatus() {
                       <p className="font-tech text-[11px] text-muted-foreground">{new Date(l.createdAt).toLocaleString("en-NG")}{l.estValueNgn ? ` · Est. value ${formatNGN(l.estValueNgn)} · Commission ${l.commissionPct}% = ${formatNGN(l.commissionNgn)} (payable if won)` : ""}</p></div>
                     <StatusBadge status={l.status} />
                   </div>))}</div>}
+            </section>
+
+            <section>
+              <h3 className="font-display font-bold uppercase text-2xl mb-4">Assigned Snap Jobs ({snapJobs.length})</h3>
+              {!snapJobs.length ? <p className="font-tech text-sm text-muted-foreground border hairline p-5">No Snap &amp; Send jobs assigned to you yet. When a customer sends a photo request and Oketex assigns it to you at an agreed price, it appears here with the site map. Keep "Available for assignments" ON (top of this page) to be picked.</p>
+                : <div className="space-y-4">{snapJobs.map(r => { const f = snapForms[r.code] ?? { text: "", photo: null }; const firstName = r.customerName.split(" ")[0]; return (
+                  <div key={r.code} className="border hairline bg-card p-5">
+                    <div className="flex flex-wrap justify-between gap-3">
+                      <div><p className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground">{r.code} · {SNAP_INTENT_LABEL[r.intent] || r.intent} · {r.urgency}</p>
+                      <p className="font-display font-semibold uppercase mt-0.5">{r.description.slice(0, 90)}{r.description.length > 90 ? "…" : ""}</p>
+                      <p className="font-tech text-[11px] text-muted-foreground mt-1">Customer: {firstName} · <a className="text-primary" href={`tel:${r.customerPhone.replace(/\s/g, "")}`}>{r.customerPhone}</a> · Site: {r.address}</p>
+                      {r.agreedPriceNgn != null && <p className="font-tech text-[11px] mt-1">Agreed price: <b className="text-primary">{formatNGN(r.agreedPriceNgn)}</b></p>}</div>
+                      <StatusBadge status={r.status} />
+                    </div>
+                    {(r.photo || r.videoPoster) && <img src={(r.photo || r.videoPoster) as string} alt="Customer snap" className="max-h-52 w-auto border hairline mt-4" />}
+                    <div className="mt-4"><MapCard geo={r.geo} address={r.address} /></div>
+                    {r.timeline.length > 0 && <div className="mt-4 border-t hairline pt-3 space-y-2">{r.timeline.map((e, i) => (<div key={i} className="flex gap-3 text-sm"><span className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground shrink-0 w-16">{e.by === "admin" ? "Oketex" : e.by}</span><div><p>{e.text}</p><p className="font-tech text-[11px] text-muted-foreground">{new Date(e.ts).toLocaleString("en-NG")}</p>{e.photo && <img src={e.photo} alt="Update" className="max-h-32 w-auto border hairline mt-1" />}</div></div>))}</div>}
+                    {!["Completed", "Declined"].includes(r.status) && (<div className="mt-4 border-t hairline pt-4">
+                      <div className="flex flex-wrap gap-2">
+                        {r.status === "Assigned" && <Button className="rounded-none font-display uppercase h-11" onClick={() => void snapStatus(r, "start")}>Start job</Button>}
+                        {r.status === "In Progress" && <Button className="rounded-none font-display uppercase h-11" onClick={() => void snapStatus(r, "complete")}>Mark complete</Button>}
+                      </div>
+                      <div className="flex flex-wrap gap-3 mt-3 items-end">
+                        <div className="flex-1 min-w-52"><label className="label-tech" htmlFor={`su-${r.code}`}>Progress update for the customer</label><input id={`su-${r.code}`} className="field-tech" placeholder="e.g. Arrived on site, old sheets removed…" value={f.text} onChange={e => setSnapForms({ ...snapForms, [r.code]: { ...f, text: e.target.value } })} /></div>
+                        <label className="inline-flex items-center gap-2 border hairline font-display font-semibold uppercase text-xs px-4 h-11 cursor-pointer hover:border-primary hover:text-primary">Add photo<input type="file" accept="image/*" capture="environment" className="hidden" onChange={async e => { const file = e.target.files?.[0]; if (file) { try { const dataUrl = await compressImageFile(file); setSnapForms({ ...snapForms, [r.code]: { ...f, photo: dataUrl } }); toast.success("Photo attached"); } catch (err: any) { toast.error(String(err?.message || err)); } } e.target.value = ""; }} /></label>
+                        <Button variant="outline" className="rounded-none font-display uppercase h-11" onClick={() => void postSnapUpdate(r)}>Post update</Button>
+                      </div>
+                      {f.photo && <img src={f.photo} alt="Attached update" className="max-h-32 w-auto border hairline mt-3" />}
+                    </div>)}
+                  </div>); })}</div>}
             </section>
 
             <section>

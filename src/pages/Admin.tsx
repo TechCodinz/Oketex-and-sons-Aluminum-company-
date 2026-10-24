@@ -3,12 +3,15 @@ import { PageHead, StatusBadge } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
 import { getOrders, getQuotes, getOrdersAsync, getQuotesAsync, type LocalOrder, type LocalQuote } from "@/lib/storage";
 import { getBookings, getBookingsAsync, updateBookingStatusAsync, BOOKING_STATUSES, type BookingStatus, type LocalBooking } from "@/lib/proStorage";
-import { getPartners, getLeads, getOffers, getPartnersAdminAsync, updatePartnerAsync, getLeadsAsync, updateLeadStatusAsync, deleteLeadAsync, getOffersAsync, addOfferAsync, deleteOfferAsync, type Partner, type Lead, type Offer } from "@/lib/partnerStorage";
+import { getPartners, getLeads, getOffers, getPartnersAdminAsync, updatePartnerAsync, getLeadsAsync, updateLeadStatusAsync, deleteLeadAsync, getOffersAsync, addOfferAsync, deleteOfferAsync, addLeadAsync, partnerAvailable, type Partner, type Lead, type Offer } from "@/lib/partnerStorage";
 import type { LeadStatus } from "@/data/partnerTerms";
 import { getPartnerTerms, getRates, getBusiness, saveSettingsAsync, resetSettingsAsync, fetchServerSettings, overrideSummary, DEFAULT_RATES, getCoupons, getPromoBanner, getPriceWatch, type Coupon, type PriceWatchMaterial } from "@/lib/settings";
 import { getJobsAdminAsync, getJobBidsAsync, updateJobStatusAsync, deleteJob, budgetLabel, type Job, type Bid } from "@/lib/jobs";
 import { getReviewsAdminAsync, setReviewStatusAsync, deleteReviewAsync, starsText, type Review } from "@/lib/reviews";
-import { getNotificationsAsync, markNotificationSentAsync, dispatchNotificationsAsync, notificationWaLink, type NotificationRecord } from "@/lib/notify";
+import { getNotificationsAsync, markNotificationSentAsync, dispatchNotificationsAsync, notificationWaLink, notify, type NotificationRecord } from "@/lib/notify";
+import { getSnapRequests, getSnapRequestsAdminAsync, assessSnapRequestAsync, declineSnapRequestAsync, adminSetSnapStatusAsync, adminSnapTimelineNoteAsync, assignSnapRequestAsync, assessmentTotal, SNAP_INTENT_LABEL, type SnapRequest, type SnapItem } from "@/lib/snapRequests";
+import { MapCard } from "@/components/MapCard";
+import { PRO_TRADES } from "@/data/partnerTerms";
 import { useApiLive, apiLiveSync } from "@/lib/api";
 import { login as authLogin, logout as authLogout, fetchMe } from "@/lib/auth";
 import { DELIVERY_ZONES } from "@/lib/roofEngine";
@@ -18,7 +21,7 @@ import { getPlans, issuePlanCode, getPlanCodes, revokePlanCode, type PlanDef, ty
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-type Tab = "quotes" | "orders" | "bookings" | "partners" | "settings" | "catalog" | "verify" | "plans" | "jobs" | "reviews" | "notifications";
+type Tab = "quotes" | "orders" | "bookings" | "partners" | "settings" | "catalog" | "verify" | "plans" | "jobs" | "reviews" | "notifications" | "snap";
 const LEAD_STATUSES: LeadStatus[] = ["new", "contacted", "won", "paid", "lost"];
 export default function Admin() {
   const [pw, setPw] = useState(""); const [email, setEmail] = useState("");
@@ -35,6 +38,15 @@ export default function Admin() {
   const [offers, setOffers] = useState<Offer[]>(() => getOffers());
   const [verifyReqs, setVerifyReqs] = useState<VerifyRequest[]>(() => getVerifyRequests());
   const [adminJobs, setAdminJobs] = useState<{ job: Job; bids: Bid[] }[]>([]);
+  const [snapReqs, setSnapReqs] = useState<SnapRequest[]>(() => getSnapRequests());
+  const [snapSel, setSnapSel] = useState<string>("");
+  const [snapItems, setSnapItems] = useState<SnapItem[]>([{ name: "", qty: 1, unitPrice: 0 }]);
+  const [snapFees, setSnapFees] = useState({ workmanship: "", transport: "", dispatch: "", notes: "" });
+  const [snapAssign, setSnapAssign] = useState({ partnerCode: "", agreed: "", trade: "" });
+  const [snapDecline, setSnapDecline] = useState("");
+  const [snapLightbox, setSnapLightbox] = useState<string | null>(null);
+  const openSnap = (r: SnapRequest) => { setSnapSel(r.code); setSnapItems(r.assessment?.items.length ? r.assessment.items.map(i => ({ ...i })) : [{ name: "", qty: 1, unitPrice: 0 }]); setSnapFees({ workmanship: r.assessment ? String(r.assessment.workmanshipNgn) : "", transport: r.assessment ? String(r.assessment.transportNgn) : "", dispatch: r.assessment ? String(r.assessment.dispatchNgn) : "", notes: r.assessment?.notes || "" }); setSnapAssign({ partnerCode: r.assignedPartnerCode || "", agreed: r.agreedPriceNgn != null ? String(r.agreedPriceNgn) : String(r.totalNgn || ""), trade: "" }); setSnapDecline(""); };
+  const snapDraftTotal = assessmentTotal({ items: snapItems, workmanshipNgn: parseFloat(snapFees.workmanship) || 0, transportNgn: parseFloat(snapFees.transport) || 0, dispatchNgn: parseFloat(snapFees.dispatch) || 0, notes: snapFees.notes });
   const [adminReviews, setAdminReviews] = useState<Review[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<NotificationRecord[]>([]);
   const [promoForm, setPromoForm] = useState(() => getPromoBanner());
@@ -54,6 +66,7 @@ export default function Admin() {
     setOrders(o); setQuotes(q); setBookings(b); setPartners(pa); setLeads(l); setOffers(of);
     const jobs = await getJobsAdminAsync();
     setAdminJobs(await Promise.all(jobs.map(async job => ({ job, bids: await getJobBidsAsync(job.code) }))));
+    setSnapReqs(await getSnapRequestsAdminAsync());
     setAdminReviews(await getReviewsAdminAsync());
     setAdminNotifications(await getNotificationsAsync());
   };
@@ -72,11 +85,11 @@ export default function Admin() {
   // ---- Settings & Rates form state (initialised from EFFECTIVE values) ----
   const [nonce, setNonce] = useState(0);
   const [termsForm, setTermsForm] = useState(() => { const t = getPartnerTerms(); return { pct: String(t.referralCommissionPct), verification: String(t.verificationFeeNgn), featured: String(t.featuredFeeNgn) }; });
-  const [ratesForm, setRatesForm] = useState(() => { const r = getRates(); return { zones: Object.fromEntries(Object.entries(r.deliveryZones).map(([k, v]) => [k, String(v)])), installation: String(r.installationPerM2), ridge: String(r.ridgePerM), timber: String(r.timberPerM) }; });
+  const [ratesForm, setRatesForm] = useState(() => { const r = getRates(); return { zones: Object.fromEntries(Object.entries(r.deliveryZones).map(([k, v]) => [k, String(v)])), installation: String(r.installationPerM2), ridge: String(r.ridgePerM), timber: String(r.timberPerM), dispatch: String(r.dispatchFeeNgn) }; });
   const [bizForm, setBizForm] = useState(() => { const b = getBusiness(); return { phone: b.phone, whatsapp: b.whatsapp, email: b.email, address: b.address, hours: b.hours }; });
   const numOr = (v: string, fallback: number) => { const n = parseFloat(v.replace(/[^0-9.]/g, "")); return Number.isFinite(n) ? n : fallback; };
   const saveTerms = async () => { const r = await saveSettingsAsync({ partnerTerms: { referralCommissionPct: numOr(termsForm.pct, terms.referralCommissionPct), verificationFeeNgn: Math.round(numOr(termsForm.verification, terms.verificationFeeNgn)), featuredFeeNgn: Math.round(numOr(termsForm.featured, terms.featuredFeeNgn)) } }); refresh(); toast.success(r.live ? "Partner terms saved to the server — every visitor now uses them" : "Partner terms saved — new leads and pages now use them"); };
-  const saveRates = async () => { const zones: Record<string, number> = {}; for (const z of DELIVERY_ZONES) zones[z.id] = Math.round(numOr(ratesForm.zones[z.id] ?? "", getRates().deliveryZones[z.id] ?? z.price)); const r = await saveSettingsAsync({ rates: { deliveryZones: zones, installationPerM2: Math.round(numOr(ratesForm.installation, DEFAULT_RATES.installationPerM2)), ridgePerM: Math.round(numOr(ratesForm.ridge, DEFAULT_RATES.ridgePerM)), timberPerM: Math.round(numOr(ratesForm.timber, DEFAULT_RATES.timberPerM)) } }); refresh(); toast.success(r.live ? "Engineering rates saved to the server — every calculator now uses them" : "Engineering rates saved — the roof calculator now uses them"); };
+  const saveRates = async () => { const zones: Record<string, number> = {}; for (const z of DELIVERY_ZONES) zones[z.id] = Math.round(numOr(ratesForm.zones[z.id] ?? "", getRates().deliveryZones[z.id] ?? z.price)); const r = await saveSettingsAsync({ rates: { deliveryZones: zones, installationPerM2: Math.round(numOr(ratesForm.installation, DEFAULT_RATES.installationPerM2)), ridgePerM: Math.round(numOr(ratesForm.ridge, DEFAULT_RATES.ridgePerM)), timberPerM: Math.round(numOr(ratesForm.timber, DEFAULT_RATES.timberPerM)), dispatchFeeNgn: Math.max(0, Math.round(numOr(ratesForm.dispatch, DEFAULT_RATES.dispatchFeeNgn))) } }); refresh(); toast.success(r.live ? "Engineering rates saved to the server — every calculator now uses them" : "Engineering rates saved — the roof calculator now uses them"); };
   const saveBusiness = async () => { await saveSettingsAsync({ business: { phone: bizForm.phone.trim(), whatsapp: bizForm.whatsapp.replace(/\D/g, ""), email: bizForm.email.trim(), address: bizForm.address.trim(), hours: bizForm.hours.trim() } }); toast.success("Business details saved — reloading so header, footer & WhatsApp buttons update…"); setTimeout(() => window.location.reload(), 700); };
   const resetAll = async () => { await resetSettingsAsync(); toast.success("All settings reset to defaults — reloading…"); setTimeout(() => window.location.reload(), 700); };
   const pendingPartners = partners.filter(p => p.status === "pending");
@@ -99,7 +112,7 @@ export default function Admin() {
   const revenue = orders.filter(o => o.status !== "cancelled").reduce((s, o) => s + o.totalNgn, 0);
   const TABS: { id: Tab; label: string }[] = [
     { id: "quotes", label: `Quotes (${quotes.length})` }, { id: "orders", label: `Orders (${orders.length})` },
-    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "verify", label: `Verification (${verifyReqs.length})${openVerify ? ` · ${openVerify} open` : ""}` }, { id: "jobs", label: `Jobs (${adminJobs.length})` }, { id: "reviews", label: `Reviews (${adminReviews.length})` }, { id: "notifications", label: `Notifications (${adminNotifications.length})` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "plans", label: "Plans" }, { id: "catalog", label: "Catalog" },
+    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "verify", label: `Verification (${verifyReqs.length})${openVerify ? ` · ${openVerify} open` : ""}` }, { id: "jobs", label: `Jobs (${adminJobs.length})` }, { id: "snap", label: `Snap & Send (${snapReqs.length})${snapReqs.filter(r => r.status === "Received").length ? ` · ${snapReqs.filter(r => r.status === "Received").length} new` : ""}` }, { id: "reviews", label: `Reviews (${adminReviews.length})` }, { id: "notifications", label: `Notifications (${adminNotifications.length})` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "plans", label: "Plans" }, { id: "catalog", label: "Catalog" },
   ];
   const pushOffer = () => {
     const price = parseInt(offerForm.price.replace(/\D/g, ""), 10) || 0;
@@ -117,7 +130,7 @@ export default function Admin() {
 
     {tab === "quotes" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Quotes ({quotes.length}){live ? " — server" : " saved on this device"}</h2>{!quotes.length ? <p className="font-tech text-sm text-muted-foreground">None yet — create one in the Pro Calculator.</p> : <div className="border hairline">{quotes.map((q, i) => (<div key={q.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between ${i > 0 ? "border-t hairline" : ""}`}><div><p className="font-tech font-semibold">{q.code} — {q.name} ({q.phone})</p><p className="font-tech text-[11px] text-muted-foreground">{q.roofType} · {q.areaM2}m² · {new Date(q.createdAt).toLocaleString("en-NG")}</p></div><div className="flex items-center gap-4"><span className="font-tech">{formatNGN(q.estimateNgn)}</span><StatusBadge status={q.status} /></div></div>))}</div>}</section>)}
 
-    {tab === "orders" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Orders ({orders.length}){live ? " — server" : " saved on this device"}</h2>{!orders.length ? <p className="font-tech text-sm text-muted-foreground">None yet.</p> : <div className="border hairline">{orders.map((o, i) => (<div key={o.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between ${i > 0 ? "border-t hairline" : ""}`}><div><p className="font-tech font-semibold">{o.code} — {o.name} ({o.phone})</p><p className="font-tech text-[11px] text-muted-foreground">{o.items.length} items · {o.address}</p></div><div className="flex items-center gap-4"><span className="font-tech">{formatNGN(o.totalNgn)}</span><StatusBadge status={o.status} /></div></div>))}</div>}</section>)}
+    {tab === "orders" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Orders ({orders.length}){live ? " — server" : " saved on this device"}</h2>{!orders.length ? <p className="font-tech text-sm text-muted-foreground">None yet.</p> : <div className="border hairline">{orders.map((o, i) => (<div key={o.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between ${i > 0 ? "border-t hairline" : ""}`}><div><p className="font-tech font-semibold">{o.code} — {o.name} ({o.phone})</p><p className="font-tech text-[11px] text-muted-foreground">{o.items.length} items · {o.address}{o.dispatchNgn ? ` · dispatch & handling ${formatNGN(o.dispatchNgn)} included` : ""}{o.deliveryNgn ? ` · delivery ${formatNGN(o.deliveryNgn)} included` : ""}</p></div><div className="flex items-center gap-4"><span className="font-tech">{formatNGN(o.totalNgn)}</span><StatusBadge status={o.status} /></div></div>))}</div>}</section>)}
 
     {tab === "bookings" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Bookings ({bookings.length}){live ? " — server" : " saved on this device — demo"}</h2>{!bookings.length ? <p className="font-tech text-sm text-muted-foreground">None yet — create one on the Book page.</p> : <div className="border hairline">{bookings.map((b, i) => (<div key={b.code} className={`px-5 py-4 flex flex-wrap gap-4 justify-between items-center ${i > 0 ? "border-t hairline" : ""}`}>
       <div><p className="font-tech font-semibold">{b.code} — {b.serviceLabel}</p><p className="font-tech text-[11px] text-muted-foreground">{b.name} ({b.phone}) · {b.date} · {b.slot} · {b.address}{b.lgaState ? `, ${b.lgaState}` : ""} · {b.buildingType} · {b.stage}</p></div>
@@ -155,13 +168,14 @@ export default function Admin() {
       <section>
         <h2 className="font-display font-bold uppercase text-2xl mb-4">All partners ({partners.length})</h2>
         <div className="border hairline overflow-x-auto"><table className="w-full text-sm min-w-[760px]">
-          <thead><tr className="border-b hairline text-left font-tech text-[10px] uppercase tracking-widest text-muted-foreground"><th className="px-4 py-3">Partner</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Verified ({formatNGN(terms.verificationFeeNgn)})</th><th className="px-4 py-3">Featured ({formatNGN(terms.featuredFeeNgn)}/mo)</th></tr></thead>
+          <thead><tr className="border-b hairline text-left font-tech text-[10px] uppercase tracking-widest text-muted-foreground"><th className="px-4 py-3">Partner</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Verified ({formatNGN(terms.verificationFeeNgn)})</th><th className="px-4 py-3">Featured ({formatNGN(terms.featuredFeeNgn)}/mo)</th><th className="px-4 py-3">Snap availability</th></tr></thead>
           <tbody>{partners.map(p => (<tr key={p.code} className="border-b hairline last:border-0">
             <td className="px-4 py-3"><span className="font-semibold">{p.businessName}</span>{p.sample ? " (sample)" : ""}<br /><span className="font-tech text-[11px] text-muted-foreground">{p.code} · {p.location}</span></td>
             <td className="px-4 py-3 font-tech text-xs uppercase">{p.role}</td>
             <td className="px-4 py-3"><StatusBadge status={p.status === "approved" ? "delivered" : p.status === "pending" ? "pending" : "cancelled"} /></td>
             <td className="px-4 py-3"><button onClick={() => { void updatePartnerAsync(p.code, { verified: !p.verified }); refresh(); }} className={`border px-3 py-1.5 font-tech text-[11px] cursor-pointer ${p.verified ? "border-primary text-primary" : "hairline text-muted-foreground hover:text-primary"}`}>{p.verified ? "Verified ✓" : "Set verified"}</button></td>
             <td className="px-4 py-3"><button onClick={() => { void updatePartnerAsync(p.code, { featured: !p.featured }); refresh(); }} className={`border px-3 py-1.5 font-tech text-[11px] cursor-pointer ${p.featured ? "border-primary text-primary" : "hairline text-muted-foreground hover:text-primary"}`}>{p.featured ? "Featured ✓" : "Set featured"}</button></td>
+            <td className="px-4 py-3">{p.status === "approved" ? <button onClick={() => { void updatePartnerAsync(p.code, { available: !partnerAvailable(p) }); refresh(); }} className={`border px-3 py-1.5 font-tech text-[11px] cursor-pointer ${partnerAvailable(p) ? "border-emerald-500/60 text-emerald-400" : "hairline text-muted-foreground hover:text-primary"}`}>{partnerAvailable(p) ? "Available ✓" : "Unavailable"}</button> : <span className="font-tech text-[11px] text-muted-foreground">—</span>}</td>
           </tr>))}</tbody>
         </table></div>
       </section>
@@ -237,6 +251,10 @@ export default function Admin() {
         <p className="label-tech mt-7 mb-3">Delivery zone prices ₦</p>
         <div className="grid md:grid-cols-5 gap-5">
           {DELIVERY_ZONES.map(z => (<div key={z.id}><label className="label-tech">{z.label.split("—")[0].trim()}</label><input className="field-tech" inputMode="numeric" value={ratesForm.zones[z.id] ?? ""} onChange={e => setRatesForm({ ...ratesForm, zones: { ...ratesForm.zones, [z.id]: e.target.value } })} /><p className="font-tech text-[10px] text-muted-foreground mt-1">Default {formatNGN(DEFAULT_RATES.deliveryZones[z.id] ?? 0)}</p></div>))}
+        </div>
+        <p className="label-tech mt-7 mb-3">Dispatch &amp; handling — shop orders</p>
+        <div className="grid md:grid-cols-3 gap-5">
+          <div><label className="label-tech">Dispatch fee ₦ (0 = off)</label><input className="field-tech" inputMode="numeric" value={ratesForm.dispatch} onChange={e => setRatesForm({ ...ratesForm, dispatch: e.target.value })} /><p className="font-tech text-[10px] text-muted-foreground mt-1">Flat per order — charged once in Cart &amp; Checkout when the customer picks a paid delivery zone. Pickup never pays it. Default ₦0 (off).</p></div>
         </div>
         <Button className="rounded-none font-display uppercase h-11 mt-6" onClick={() => void saveRates()}>Save engineering rates</Button>
       </section>
@@ -333,6 +351,83 @@ export default function Admin() {
       <div className="border hairline mt-5 divide-y divide-white/10">{planCodes.length === 0 && <p className="px-4 py-5 font-tech text-xs text-muted-foreground">No codes issued yet.</p>}{planCodes.map(c => (<div key={c.code} className="px-4 py-3 flex flex-wrap gap-3 items-center justify-between"><p className="font-tech text-sm"><b>{c.code}</b> · {c.planId} · issued {new Date(c.createdAt).toLocaleDateString("en-NG")}</p>
         <div className="flex items-center gap-3"><span className="font-tech text-[11px] text-muted-foreground">{c.revoked ? "REVOKED" : c.usedAt ? `Used ${new Date(c.usedAt).toLocaleDateString("en-NG")}` : "Unused"}</span>{!c.usedAt && !c.revoked && <button onClick={() => { revokePlanCode(c.code); setPlanCodes(getPlanCodes()); }} className="font-tech text-[11px] border hairline px-2.5 py-1 hover:border-destructive hover:text-destructive cursor-pointer">Revoke</button>}</div></div>))}</div>
       </section></div>)}
+
+    {tab === "snap" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Snap &amp; Send ({snapReqs.length})</h2>
+      <p className="font-tech text-xs text-muted-foreground mb-4">Customers snap a photo/video of a problem, a build, or an item to sell. Price the job openly (items + workmanship + transport + dispatch), the customer approves in Track, then assign an approved partner — commission is snapshotted from the partner terms ({terms.referralCommissionPct}%) on the AGREED price at assignment.</p>
+      {!snapReqs.length ? <p className="font-tech text-sm text-muted-foreground">No Snap &amp; Send requests yet — the queue starts empty and fills as customers send from /snap-send.</p> :
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{snapReqs.map(r => { const thumb = r.photo || r.videoPoster; return (<button key={r.code} onClick={() => openSnap(r)} className={`text-left border hairline bg-card cursor-pointer ${snapSel === r.code ? "border-primary" : "hover:border-primary/60"}`}>
+        {thumb ? <img src={thumb} alt="Customer snap" className="w-full h-36 object-cover" /> : <div className="w-full h-36 flex items-center justify-center font-tech text-[11px] text-muted-foreground uppercase tracking-widest">No photo attached</div>}
+        <div className="p-4"><div className="flex justify-between gap-2 items-start"><p className="font-tech font-semibold text-sm">{r.code}</p><StatusBadge status={r.status} /></div>
+        <p className="font-tech text-[11px] text-muted-foreground mt-1">{SNAP_INTENT_LABEL[r.intent] || r.intent} · {r.urgency} · {r.customerName}</p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{r.description}</p>
+        <p className="font-tech text-[11px] text-muted-foreground mt-2">{new Date(r.createdAt).toLocaleString("en-NG")}{r.totalNgn ? ` · Priced ${formatNGN(r.totalNgn)}` : ""}{r.assignedPartnerName ? ` · → ${r.assignedPartnerName}` : ""}</p></div>
+      </button>); })}</div>}
+      {(() => { const sel = snapReqs.find(r => r.code === snapSel); if (!sel) return null; const mainPhoto = sel.photo || sel.videoPoster; const approvedPartners = partners.filter(p => p.status === "approved" && (!snapAssign.trade || p.trades.includes(snapAssign.trade) || p.categories.includes(snapAssign.trade))); return (<div className="border hairline bg-card mt-6 p-5">
+        <div className="flex flex-wrap gap-3 justify-between items-start"><div><p className="font-tech font-semibold text-lg">{sel.code} — {SNAP_INTENT_LABEL[sel.intent] || sel.intent}</p>
+        <p className="font-tech text-[11px] text-muted-foreground mt-1">{sel.customerName} · <a className="text-primary" href={waCustomer(sel.customerPhone, `Hello ${sel.customerName}, this is Oketex about your Snap & Send request ${sel.code}.`)} target="_blank" rel="noreferrer">{sel.customerPhone} (WhatsApp)</a> · {sel.urgency} · {new Date(sel.createdAt).toLocaleString("en-NG")}</p></div>
+        <div className="flex gap-2 items-center"><StatusBadge status={sel.status} />{sel.status === "Received" && <button onClick={() => { void adminSetSnapStatusAsync(sel.code, "Under Review"); refresh(); }} className="font-tech text-[11px] border hairline px-2.5 py-1 hover:border-primary hover:text-primary cursor-pointer">Mark under review</button>}<button onClick={() => setSnapSel("")} className="font-tech text-[11px] border hairline px-2.5 py-1 hover:text-destructive cursor-pointer">Close</button></div></div>
+        <p className="text-sm mt-3 max-w-3xl">{sel.description}</p>
+        {sel.intent === "sell" && sel.sellItemName && <p className="font-tech text-xs mt-2">Item for sale: <b>{sel.sellItemName}</b>{sel.sellAskingNgn ? ` · asking ${formatNGN(sel.sellAskingNgn)}` : ""}{sel.sellCondition ? ` · ${sel.sellCondition}` : ""}</p>}
+        {sel.videoNote && <p className="font-tech text-[11px] text-amber-400 mt-2">{sel.videoNote}</p>}
+        <div className="grid lg:grid-cols-2 gap-5 mt-5">
+          <div>{mainPhoto ? <button onClick={() => setSnapLightbox(mainPhoto)} className="block cursor-pointer"><img src={mainPhoto} alt="Customer snap" className="w-full max-h-80 object-contain border hairline bg-black/30" /><span className="font-tech text-[10px] text-muted-foreground">Tap to enlarge{sel.videoPoster && !sel.photo ? " — frame from the customer's video" : ""}</span></button> : <p className="font-tech text-sm text-muted-foreground border hairline p-5">No photo attached to this request.</p>}</div>
+          <MapCard geo={sel.geo} address={sel.address} />
+        </div>
+
+        <div className="border hairline mt-6">
+          <p className="label-tech px-4 py-3 border-b hairline">Assessment — price the job</p>
+          <div className="p-4 space-y-3">
+            <datalist id="snap-catalog">{products.map(p => (<option key={p.slug} value={p.name}>{formatNGN(p.priceNgn)} {p.unit}</option>))}</datalist>
+            {snapItems.map((it, i) => (<div key={i} className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-52"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Item / material</label><input list="snap-catalog" value={it.name} onChange={e => { const v = e.target.value; const cat = products.find(p => p.name === v); setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, name: v, unitPrice: cat ? cat.priceNgn : x.unitPrice } : x)); }} className="field-tech" placeholder="Pick from catalog or type" /></div>
+              <div className="w-24"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Qty</label><input type="number" min={0} value={it.qty} onChange={e => setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, qty: Number(e.target.value) || 0 } : x))} className="field-tech font-tech" /></div>
+              <div className="w-36"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Unit price ₦</label><input type="number" min={0} value={it.unitPrice} onChange={e => setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, unitPrice: Number(e.target.value) || 0 } : x))} className="field-tech font-tech" /></div>
+              <span className="font-tech text-sm pb-3 w-28 text-right">{formatNGN(it.qty * it.unitPrice)}</span>
+              <button onClick={() => setSnapItems(snapItems.filter((_, xi) => xi !== i))} className="font-tech text-[11px] text-muted-foreground hover:text-destructive cursor-pointer pb-3">Remove</button>
+            </div>))}
+            <button onClick={() => setSnapItems([...snapItems, { name: "", qty: 1, unitPrice: 0 }])} className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary cursor-pointer">+ Add item</button>
+            <div className="grid sm:grid-cols-3 gap-3 pt-1">
+              <div><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Workmanship ₦</label><input type="number" min={0} value={snapFees.workmanship} onChange={e => setSnapFees({ ...snapFees, workmanship: e.target.value })} className="field-tech font-tech" /></div>
+              <div><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Transport ₦</label><input type="number" min={0} value={snapFees.transport} onChange={e => setSnapFees({ ...snapFees, transport: e.target.value })} className="field-tech font-tech" /></div>
+              <div><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Dispatch ₦</label><input type="number" min={0} value={snapFees.dispatch} onChange={e => setSnapFees({ ...snapFees, dispatch: e.target.value })} className="field-tech font-tech" /></div>
+            </div>
+            <div><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Admin notes (customer sees these)</label><input value={snapFees.notes} onChange={e => setSnapFees({ ...snapFees, notes: e.target.value })} className="field-tech" placeholder="e.g. Price includes removing the damaged sheets" /></div>
+            <div className="flex flex-wrap gap-3 items-center justify-between border-t hairline pt-4">
+              <p className="font-tech text-sm">Live total: <span className="font-display font-bold text-2xl text-primary">{formatNGN(snapDraftTotal)}</span></p>
+              <div className="flex gap-2 flex-wrap">
+                <Button className="rounded-none font-display uppercase h-11" onClick={async () => { const updated = await assessSnapRequestAsync(sel.code, { items: snapItems.filter(i => i.name.trim()), workmanshipNgn: parseFloat(snapFees.workmanship) || 0, transportNgn: parseFloat(snapFees.transport) || 0, dispatchNgn: parseFloat(snapFees.dispatch) || 0, notes: snapFees.notes }); if (updated) { setSnapReqs(prev => prev.map(x => x.code === updated.code ? updated : x)); openSnap(updated); void notify({ templateKey: "snap_priced", audience: "customer", refCode: sel.code, phone: sel.customerPhone, vars: { code: sel.code, name: sel.customerName, amount: formatNGN(updated.totalNgn) } }); toast.success(`Assessment saved — total ${formatNGN(updated.totalNgn)}. Status: Priced`); } }}>Save assessment → Priced</Button>
+              </div>
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input value={snapDecline} onChange={e => setSnapDecline(e.target.value)} placeholder="Decline reason (optional)" className="field-tech !w-72" />
+              <button onClick={async () => { await declineSnapRequestAsync(sel.code, snapDecline.trim()); refresh(); toast.message(`${sel.code} declined`); }} className="font-tech text-[11px] border hairline px-3 py-2 hover:border-destructive hover:text-destructive cursor-pointer">Decline request</button>
+            </div>
+          </div>
+        </div>
+
+        {["Priced", "Approved", "Assigned", "In Progress"].includes(sel.status) && (<div className="border hairline mt-5">
+          <p className="label-tech px-4 py-3 border-b hairline">Assignment — approved partners only</p>
+          <div className="p-4 space-y-3">
+            {sel.assignedPartnerCode ? <p className="font-tech text-sm">Assigned to <b>{sel.assignedPartnerName || sel.assignedPartnerCode}</b> at {sel.agreedPriceNgn != null ? formatNGN(sel.agreedPriceNgn) : "—"} · Commission snapshot: {sel.commissionPct}% = {sel.commissionNgn != null ? formatNGN(sel.commissionNgn) : "—"}</p> : <p className="font-tech text-xs text-muted-foreground">Pick a pro and the agreed price. The commission % snapshots from the partner terms the moment you assign.</p>}
+            <div className="flex flex-wrap gap-3 items-end">
+              <div><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Trade filter</label><select value={snapAssign.trade} onChange={e => setSnapAssign({ ...snapAssign, trade: e.target.value })} className="bg-background border hairline font-tech text-sm px-3 py-2.5 cursor-pointer"><option value="">All trades</option>{PRO_TRADES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+              <div className="flex-1 min-w-64"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Partner (approved only)</label><select value={snapAssign.partnerCode} onChange={e => setSnapAssign({ ...snapAssign, partnerCode: e.target.value })} className="w-full bg-background border hairline font-tech text-sm px-3 py-2.5 cursor-pointer"><option value="">Select a partner…</option>{approvedPartners.map(p => (<option key={p.code} value={p.code}>{p.businessName} — {(p.role === "pro" ? p.trades : p.categories).join(", ") || "General"} — {partnerAvailable(p) ? "Available" : "Unavailable"}</option>))}</select></div>
+              <div className="w-44"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Agreed price ₦</label><input type="number" min={0} value={snapAssign.agreed} onChange={e => setSnapAssign({ ...snapAssign, agreed: e.target.value })} className="field-tech font-tech" /></div>
+              <Button className="rounded-none font-display uppercase h-11" onClick={async () => { const partner = partners.find(p => p.code === snapAssign.partnerCode); if (!partner) return toast.error("Pick an approved partner first"); const agreed = parseFloat(snapAssign.agreed) || sel.totalNgn; const res = await assignSnapRequestAsync(sel.code, partner.code, partner.businessName, agreed); if (res.error || !res.request) return toast.error(res.error || "Assignment failed"); setSnapReqs(prev => prev.map(x => x.code === res.request!.code ? res.request! : x)); openSnap(res.request); void notify({ templateKey: "snap_assigned_partner", audience: "partner", refCode: sel.code, phone: partner.phone, vars: { code: sel.code, partner: partner.businessName, name: sel.customerName, phone: sel.customerPhone, amount: formatNGN(agreed), address: sel.address } }); void notify({ templateKey: "snap_assigned_customer", audience: "customer", refCode: sel.code, phone: sel.customerPhone, vars: { code: sel.code, name: sel.customerName, partner: partner.businessName, amount: formatNGN(agreed) } }); toast.success(`Assigned to ${partner.businessName} at ${formatNGN(agreed)} — commission ${res.request.commissionPct}% = ${formatNGN(res.request.commissionNgn || 0)}`); }}>{sel.assignedPartnerCode ? "Reassign" : "Assign partner"}</Button>
+            </div>
+            {!approvedPartners.length && <p className="font-tech text-[11px] text-amber-400">No approved partners match this filter yet — approve partners in the Partners tab first.</p>}
+          </div>
+        </div>)}
+
+        {sel.intent === "sell" && (<div className="border hairline mt-5 p-4 flex flex-wrap gap-3 items-center justify-between">
+          <p className="font-tech text-xs text-muted-foreground max-w-xl">Sell request? Convert it into a tracked network lead for the partner selected above — the lead carries the asking price as its estimated value and the standard commission snapshot.</p>
+          <Button variant="outline" className="rounded-none font-display uppercase h-11" onClick={async () => { const partner = partners.find(p => p.code === snapAssign.partnerCode); if (!partner) return toast.error("Pick a partner in the assignment panel first"); const lead = await addLeadAsync({ partnerCode: partner.code, partnerName: partner.businessName, type: "supply", customerName: sel.customerName, customerPhone: sel.customerPhone, description: `Sell request ${sel.code}: ${sel.sellItemName || "item"} — ${sel.description}`, estValueNgn: sel.sellAskingNgn || sel.totalNgn || 0 }); await adminSnapTimelineNoteAsync(sel.code, `Converted to lead ${lead.id} for ${partner.businessName}.`); refresh(); toast.success(`Converted — lead ${lead.id} opened for ${partner.businessName}`); }}>Convert sell request to lead</Button>
+        </div>)}
+
+        <div className="mt-6"><p className="label-tech mb-3">Timeline</p><div className="space-y-2">{sel.timeline.map((e, i) => (<div key={i} className="flex gap-3 text-sm"><span className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground shrink-0 w-16">{e.by === "admin" ? "Oketex" : e.by}</span><div><p>{e.text}</p><p className="font-tech text-[11px] text-muted-foreground">{new Date(e.ts).toLocaleString("en-NG")}</p>{e.photo && <button onClick={() => setSnapLightbox(e.photo!)} className="block mt-1 cursor-pointer"><img src={e.photo} alt="Timeline update" className="max-h-32 w-auto border hairline" /></button>}</div></div>))}</div></div>
+      </div>); })()}
+      {snapLightbox && <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={() => setSnapLightbox(null)}><img src={snapLightbox} alt="Enlarged snap" className="max-h-[90vh] max-w-full object-contain" /></div>}
+    </section>)}
 
     {tab === "jobs" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Job Board ({adminJobs.length})</h2>
       <p className="font-tech text-xs text-muted-foreground mb-4">Jobs customers post for partners to bid on. Close a job to stop new bids, reopen it, or remove it. Awarding happens on the customer's tracking page (they pick the bid they want) — accepting a bid automatically opens a lead with the commission snapshotted.</p>

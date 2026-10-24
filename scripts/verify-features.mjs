@@ -10,8 +10,9 @@ export { eavesCalc, pitchFromRiseRun } from "@/data/roofingGuide";
 export { computeEntitlements, redeemPlanCode, DEFAULT_PLANS } from "@/lib/plans";
 export { computeAssistantRange, parseDims, parseArea, parsePitch, isQuoteIntent } from "@/lib/assistantBrain";
 export { calculateRoof } from "@/lib/roofEngine";
-export { couponDiscountNgn, validateCoupon } from "@/lib/settings";
+export { couponDiscountNgn, validateCoupon, orderGrandTotal, dispatchFor } from "@/lib/settings";
 export { summarizeReviews } from "@/lib/reviews";
+export { assessmentTotal, snapCommission } from "@/lib/snapRequests";
 export { renderTemplate } from "@/lib/notify";
 export { translate } from "@/lib/i18n";
 `;
@@ -121,6 +122,26 @@ eq("pcm nav.track is Pidgin", M.translate("pcm", "nav.track"), "Track Am");
 ok("yo hero title part 2 present", M.translate("yo", "hero.title2").length > 0);
 ok("ha nav.jobs present", M.translate("ha", "nav.jobs").length > 0);
 eq("unknown key falls back to the key", M.translate("pcm", "no.such.key"), "no.such.key");
+
+console.log("— Snap & Send assessment + commission (Snap & Send Jobs) —");
+// Spec fixture: items 2 × ₦6,500 = 13,000 + workmanship 25,000 + transport
+// 8,000 + dispatch 2,500 → total ₦48,500.
+const snapA = { items: [{ name: "Longspan sheet 0.45mm", qty: 2, unitPrice: 6500 }], workmanshipNgn: 25000, transportNgn: 8000, dispatchNgn: 2500, notes: "" };
+eq("assessment total = 48,500", M.assessmentTotal(snapA), 48500);
+eq("empty assessment totals 0", M.assessmentTotal(null), 0);
+// Commission snapshot uses the AGREED price: 5% of 48,500 = 2,425; after
+// negotiation to 45,000 → 5% = 2,250 (never the list total).
+eq("commission 5% of agreed 48,500 = 2,425", M.snapCommission(48500, 5), 2425);
+eq("commission 5% of negotiated 45,000 = 2,250", M.snapCommission(45000, 5), 2250);
+
+console.log("— Shop dispatch & handling fee (Snap & Send Jobs) —");
+// Spec fixture: dispatchFeeNgn 3,000 + zone delivery 45,000 (ogun-lagos) on
+// a ₦100,000 cart → grand total ₦148,000; pickup → no dispatch line.
+eq("dispatch applies on a paid zone", M.dispatchFor(3000, "ogun-lagos"), 3000);
+eq("dispatch never applies on pickup", M.dispatchFor(3000, "pickup"), 0);
+eq("dispatch off when fee is 0", M.dispatchFor(0, "ogun-lagos"), 0);
+eq("grand total 100,000 + 45,000 + 3,000 = 148,000", M.orderGrandTotal(100000, 45000, 3000, "ogun-lagos"), 148000);
+eq("pickup grand total stays 100,000", M.orderGrandTotal(100000, 0, 3000, "pickup"), 100000);
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

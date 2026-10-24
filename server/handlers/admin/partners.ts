@@ -19,6 +19,11 @@ export default wrap(async (req: any, res: any) => {
     if (typeof b.status === "string" && ["pending", "approved", "rejected"].includes(b.status)) { vals.push(b.status); sets.push(`status = $${vals.length}`); }
     if (typeof b.verified === "boolean") { vals.push(b.verified); sets.push(`verified = $${vals.length}`); }
     if (typeof b.featured === "boolean") { vals.push(b.featured); sets.push(`featured = $${vals.length}`); if (!b.featured) sets.push(`featured_until = NULL`); }
+    if (typeof b.available === "boolean") {
+      const cur = await dbQuery(`SELECT data FROM partners WHERE code = $1`, [code]);
+      const d = cur.length ? (typeof cur[0].data === "string" ? JSON.parse(cur[0].data || "{}") : (cur[0].data || {})) : {};
+      vals.push(JSON.stringify({ ...d, available: b.available })); sets.push(`data = $${vals.length}::jsonb`);
+    }
     if (!sets.length) return sendJson(res, 400, { error: "Nothing to update" });
     vals.push(code);
     const rows = await dbQuery(`UPDATE partners SET ${sets.join(", ")} WHERE code = $${vals.length} RETURNING *`, vals);

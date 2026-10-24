@@ -29,6 +29,7 @@ const NAV_EXTRA = [
   { to: "/roofing-guide", k: "nav.roofingGuide" },
   { to: "/plans", k: "nav.gopro" },
   { to: "/jobs", k: "nav.jobs" },
+  { to: "/snap-send", k: "nav.snapSend" },
   { to: "/prices", k: "nav.prices" },
   { to: "/snap-measure", k: "nav.snap" },
   { to: "/services", k: "nav.services" },

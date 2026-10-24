@@ -38,6 +38,7 @@ export const DICT: Dict = {
   "nav.join": { en: "Join as Pro/Seller", pcm: "Join as Pro/Seller", yo: "Darapọ̀ Mọ́ Wa", ha: "Shiga Pro/Mai Sayarwa" },
   "nav.partnerStatus": { en: "Partner Status", pcm: "Partner Status", yo: "Ipò Ẹgbẹ́", ha: "Matsayin Aboki" },
   "nav.jobs": { en: "Jobs Board", pcm: "Jobs Board", yo: "Pátákó Iṣẹ́", ha: "Allon Ayyuka" },
+  "nav.snapSend": { en: "Snap & Send", pcm: "Snap & Send", yo: "Snap & Send", ha: "Snap & Send" },
   "nav.prices": { en: "Price Watch", pcm: "Price Watch", yo: "Ìṣọ́ Owó", ha: "Kallon Farashi" },
   "header.signin": { en: "Sign in", pcm: "Sign In", yo: "Wọlé", ha: "Shiga" },
   "header.admin": { en: "Admin", pcm: "Admin", yo: "Alábojútó", ha: "Mai Gudanarwa" },
