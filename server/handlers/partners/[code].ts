@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, wrap } from "../../server/http";
-import { dbQuery, isDbConfigured } from "../../server/db";
-import { partnerFromRow } from "../../server/records";
+import { sendJson, methodNotAllowed, wrap } from "../../http";
+import { dbQuery, isDbConfigured } from "../../db";
+import { partnerFromRow } from "../../records";
 // GET /api/partners/<code> — the code acts as the partner's capability key
 // (same trust model as the demo): returns the full record for ANY status so
 // /partner-status works for pending applications too. The public directory

@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../../server/http";
-import { isDbConfigured } from "../../server/db";
-import { verifyPassword, signSession, sessionCookieHeader, publicUser, findUserByEmail, isAdminBootstrap, adminBootstrapUser } from "../../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../../http";
+import { isDbConfigured } from "../../db";
+import { verifyPassword, signSession, sessionCookieHeader, publicUser, findUserByEmail, isAdminBootstrap, adminBootstrapUser } from "../../auth";
 export default wrap(async (req: any, res: any) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   const b = await readJson(req);

@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../server/http";
-import { dbQuery, isDbConfigured } from "../server/db";
-import { bookingFromRow } from "../server/records";
-import { isAdmin } from "../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
+import { dbQuery, isDbConfigured } from "../db";
+import { bookingFromRow } from "../records";
+import { isAdmin } from "../auth";
 // POST (public) → create booking. GET ?code= | ?phone= → lookups (track
 // page + account). GET (admin, no query) → all. PATCH (admin) → {code,status}.
 export default wrap(async (req: any, res: any) => {

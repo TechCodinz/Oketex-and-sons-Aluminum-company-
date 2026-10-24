@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../server/http";
-import { dbQuery, isDbConfigured } from "../server/db";
-import { quoteFromRow } from "../server/records";
-import { isAdmin } from "../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
+import { dbQuery, isDbConfigured } from "../db";
+import { quoteFromRow } from "../records";
+import { isAdmin } from "../auth";
 // POST (public) → save a calculator quote. GET → admin list only.
 export default wrap(async (req: any, res: any) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });

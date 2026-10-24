@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../server/http";
-import { dbQuery, isDbConfigured } from "../server/db";
-import { partnerFromRow } from "../server/records";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
+import { dbQuery, isDbConfigured } from "../db";
+import { partnerFromRow } from "../records";
 // GET  → public directory list (approved only).
 // POST → partner registration; always lands as status 'pending'.
 export default wrap(async (req: any, res: any) => {

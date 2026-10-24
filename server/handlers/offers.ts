@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../server/http";
-import { dbQuery, isDbConfigured } from "../server/db";
-import { offerFromRow } from "../server/records";
-import { isAdmin } from "../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
+import { dbQuery, isDbConfigured } from "../db";
+import { offerFromRow } from "../records";
+import { isAdmin } from "../auth";
 // Supply offers pushed by admin to the partner network.
 // GET (public) → all offers (frontend filters by audience). POST/DELETE admin.
 export default wrap(async (req: any, res: any) => {

@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../../server/http";
-import { dbQuery, isDbConfigured } from "../../server/db";
-import { hashPassword, signSession, sessionCookieHeader, publicUser, findUserByEmail } from "../../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../../http";
+import { dbQuery, isDbConfigured } from "../../db";
+import { hashPassword, signSession, sessionCookieHeader, publicUser, findUserByEmail } from "../../auth";
 export default wrap(async (req: any, res: any) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured" });

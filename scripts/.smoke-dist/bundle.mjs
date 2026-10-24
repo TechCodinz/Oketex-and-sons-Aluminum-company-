@@ -2662,7 +2662,7 @@ function publicUser(row) {
   };
 }
 
-// api/health.ts
+// server/handlers/health.ts
 var health_default = wrap(async (_req, res) => {
   const db = isDbConfigured() ? await dbPing() : false;
   return sendJson(res, 200, { ok: true, db, auth: authConfigured(), payments: paystackEnabled(), ts: (/* @__PURE__ */ new Date()).toISOString() });
@@ -2786,7 +2786,7 @@ var SCHEMA_STATEMENTS = [
 ];
 var SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";
 
-// api/setup.ts
+// server/handlers/setup.ts
 var setup_default = wrap(async (req, res) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   const expected = process.env.SETUP_SECRET || "";
@@ -2801,7 +2801,7 @@ var setup_default = wrap(async (req, res) => {
   return sendJson(res, 200, { ok: true, statementsApplied: done.length, tables: ["users", "partners", "leads", "bookings", "orders", "quotes", "payments", "settings", "offers"] });
 });
 
-// api/auth/register.ts
+// server/handlers/auth/register.ts
 var register_default = wrap(async (req, res) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured" });
@@ -2827,7 +2827,7 @@ var register_default = wrap(async (req, res) => {
   return sendJson(res, 201, { user });
 });
 
-// api/auth/login.ts
+// server/handlers/auth/login.ts
 var login_default = wrap(async (req, res) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   const b = await readJson(req);
@@ -2850,13 +2850,13 @@ var login_default = wrap(async (req, res) => {
   return sendJson(res, 200, { user });
 });
 
-// api/auth/logout.ts
+// server/handlers/auth/logout.ts
 var logout_default = wrap(async (_req, res) => {
   res.setHeader("Set-Cookie", clearCookieHeader());
   return sendJson(res, 200, { ok: true });
 });
 
-// api/auth/me.ts
+// server/handlers/auth/me.ts
 var me_default = wrap(async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return sendJson(res, 401, { user: null });
@@ -2963,7 +2963,7 @@ function offerFromRow(r) {
   };
 }
 
-// api/partners.ts
+// server/handlers/partners.ts
 var partners_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "GET") {
@@ -2989,7 +2989,7 @@ var partners_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST"]);
 });
 
-// api/partners/[code].ts
+// server/handlers/partners/[code].ts
 var code_default = wrap(async (req, res) => {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
@@ -2999,7 +2999,7 @@ var code_default = wrap(async (req, res) => {
   return sendJson(res, 200, { partner: partnerFromRow(rows[0]) });
 });
 
-// api/admin/partners.ts
+// server/handlers/admin/partners.ts
 var partners_default2 = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (!await isAdmin(req)) return sendJson(res, 401, { error: "Admin session required" });
@@ -3061,7 +3061,7 @@ function commissionForValue(estValueNgn, pct) {
   return Math.round(Math.max(0, estValueNgn || 0) * pct / 100);
 }
 
-// api/leads.ts
+// server/handlers/leads.ts
 var leads_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "POST") {
@@ -3107,7 +3107,7 @@ var leads_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
 });
 
-// api/bookings.ts
+// server/handlers/bookings.ts
 var bookings_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "POST") {
@@ -3147,7 +3147,7 @@ var bookings_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 });
 
-// api/orders.ts
+// server/handlers/orders.ts
 var orders_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "POST") {
@@ -3202,7 +3202,7 @@ var orders_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 });
 
-// api/quotes.ts
+// server/handlers/quotes.ts
 var quotes_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "POST") {
@@ -3224,7 +3224,7 @@ var quotes_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST"]);
 });
 
-// api/settings.ts
+// server/handlers/settings.ts
 var settings_default = wrap(async (req, res) => {
   if (req.method === "GET") {
     if (!isDbConfigured()) return sendJson(res, 200, { live: false, settings: null });
@@ -3246,7 +3246,7 @@ var settings_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "PUT"]);
 });
 
-// api/offers.ts
+// server/handlers/offers.ts
 var offers_default = wrap(async (req, res) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "GET") {
@@ -3273,7 +3273,7 @@ var offers_default = wrap(async (req, res) => {
   return methodNotAllowed(res, ["GET", "POST", "DELETE"]);
 });
 
-// api/payments/initialize.ts
+// server/handlers/payments/initialize.ts
 var PURPOSES = ["partner_verification", "partner_featured", "order", "booking_deposit", "generic"];
 var initialize_default = wrap(async (req, res) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -3303,7 +3303,7 @@ var initialize_default = wrap(async (req, res) => {
   }
 });
 
-// api/payments/webhook.ts
+// server/handlers/payments/webhook.ts
 var webhook_default = wrap(async (req, res) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   if (!paystackEnabled() || !isDbConfigured()) return sendJson(res, 200, { received: true, ignored: "payments not configured" });

@@ -1,8 +1,8 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../server/http";
-import { dbQuery, isDbConfigured } from "../server/db";
-import { leadFromRow } from "../server/records";
-import { isAdmin } from "../server/auth";
-import { getServerPartnerTerms, commissionForValue } from "../server/siteSettings";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../http";
+import { dbQuery, isDbConfigured } from "../db";
+import { leadFromRow } from "../records";
+import { isAdmin } from "../auth";
+import { getServerPartnerTerms, commissionForValue } from "../siteSettings";
 // POST (public) → create a lead; commission % is snapshotted from the
 //   EFFECTIVE server terms at creation, exactly like the demo store.
 // GET ?partnerCode= → that partner's leads (code = capability).

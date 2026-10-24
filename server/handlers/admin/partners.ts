@@ -1,7 +1,7 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../../server/http";
-import { dbQuery, isDbConfigured } from "../../server/db";
-import { partnerFromRow } from "../../server/records";
-import { isAdmin } from "../../server/auth";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../../http";
+import { dbQuery, isDbConfigured } from "../../db";
+import { partnerFromRow } from "../../records";
+import { isAdmin } from "../../auth";
 // Admin-only partner management: GET all (incl. pending) + PATCH one
 // {code, status?, verified?, featured?}.
 export default wrap(async (req: any, res: any) => {

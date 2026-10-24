@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, readJson, wrap } from "../../server/http";
-import { dbQuery, isDbConfigured } from "../../server/db";
-import { paystackEnabled, initializeTransaction, genReference } from "../../server/paystack";
+import { sendJson, methodNotAllowed, readJson, wrap } from "../../http";
+import { dbQuery, isDbConfigured } from "../../db";
+import { paystackEnabled, initializeTransaction, genReference } from "../../paystack";
 // POST {email, amountNgn, purpose, refId, callbackUrl?}
 // Fail-closed: no PAYSTACK_SECRET_KEY → {enabled:false} and nothing stored.
 // With a key: creates a pending payment row, initialises with Paystack, and

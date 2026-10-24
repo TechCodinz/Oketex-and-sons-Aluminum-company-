@@ -1,6 +1,6 @@
-import { sendJson, methodNotAllowed, wrap } from "../../server/http";
-import { dbQuery, isDbConfigured } from "../../server/db";
-import { paystackEnabled, verifyTransaction, applyPaymentEffect } from "../../server/paystack";
+import { sendJson, methodNotAllowed, wrap } from "../../http";
+import { dbQuery, isDbConfigured } from "../../db";
+import { paystackEnabled, verifyTransaction, applyPaymentEffect } from "../../paystack";
 // GET ?reference= → asks Paystack directly (server-to-server); on a
 // confirmed success with matching amount, applies the payment effect and
 // returns the payment record. Source of truth alongside the webhook.
