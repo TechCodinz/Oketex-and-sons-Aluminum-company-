@@ -15,6 +15,7 @@ const NAV = [
   { to: "/tools", label: "Tools" },
   { to: "/build", label: "Build A–Z" },
   { to: "/workspace", label: "Workspace" },
+  { to: "/documents", label: "Documents" },
   { to: "/book", label: "Book" },
   { to: "/partners", label: "Partners" },
   { to: "/gallery", label: "Gallery" },
@@ -22,6 +23,9 @@ const NAV = [
   { to: "/assistant", label: "Assistant" },
 ];
 const NAV_EXTRA = [
+  { to: "/documents", label: "Documents" },
+  { to: "/roofing-guide", label: "Roofing Guide" },
+  { to: "/plans", label: "Go Pro" },
   { to: "/snap-measure", label: "Snap-Measure" },
   { to: "/services", label: "Services" },
   { to: "/join", label: "Join as Pro/Seller" },
@@ -49,7 +53,7 @@ export function SiteHeader() {
           <Link to="/admin" className="hidden sm:inline-flex border hairline px-3 py-2 font-display uppercase tracking-wider text-xs hover:text-primary">Admin</Link>
         </div>
       </div></div>
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetContent side="left" className="w-72 max-w-[85vw] bg-background overflow-y-auto overscroll-contain max-h-dvh pb-10"><SheetHeader><SheetTitle className="flex items-center gap-2"><LogoMark className="h-7 w-7 text-foreground" /><span className="font-display uppercase">Oketex &amp; Sons</span></SheetTitle></SheetHeader><nav className="mt-8 flex flex-col gap-1">{[...NAV, ...NAV_EXTRA].map(item=>(<NavLink key={item.to} to={item.to} onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline hover:text-primary">{item.label}</NavLink>))}<NavLink to="/admin" onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline">Admin (Demo)</NavLink></nav></SheetContent></Sheet>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetContent side="left" className="w-72 max-w-[85vw] bg-background overflow-y-auto overscroll-contain max-h-dvh pb-10"><SheetHeader><SheetTitle className="flex items-center gap-2"><LogoMark className="h-7 w-7 text-foreground" /><span className="font-display uppercase">Oketex &amp; Sons</span></SheetTitle></SheetHeader><nav className="mt-8 flex flex-col gap-1">{[...NAV, ...NAV_EXTRA].filter((v,i,a)=>a.findIndex(x=>x.to===v.to)===i).map(item=>(<NavLink key={item.to} to={item.to} onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline hover:text-primary">{item.label}</NavLink>))}<NavLink to="/admin" onClick={()=>setMobileOpen(false)} className="px-3 py-3 font-display font-semibold uppercase tracking-wider border-b hairline">Admin (Demo)</NavLink></nav></SheetContent></Sheet>
     </header>
   );
 }

@@ -253,6 +253,7 @@ export default function Estimator() {
             </button>
           ))}
         </div>
+        {trade === "roofing" && <p className="font-tech text-xs mt-5">Choosing a roofing style? See <Link to="/roofing-guide" className="text-primary hover:underline">methods & standard measurements</Link> — min pitches, laps, fixings, eaves and fascia sizes for every profile.</p>}
         <div className="mt-8 flex justify-end"><Button className="rounded-none font-display uppercase h-12 px-8" onClick={() => setStep(3)}>Continue — photo & dimensions <ArrowRight className="h-4 w-4 ml-2" /></Button></div>
       </section>)}
 

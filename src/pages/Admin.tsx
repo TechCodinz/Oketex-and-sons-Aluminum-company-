@@ -10,10 +10,12 @@ import { useApiLive, apiLiveSync } from "@/lib/api";
 import { login as authLogin, logout as authLogout, fetchMe } from "@/lib/auth";
 import { DELIVERY_ZONES } from "@/lib/roofEngine";
 import { products, categories } from "@/data/catalog";
+import { getVerifyRequests, saveVerifyRequests, VERIFY_STATUSES, type VerifyRequest, type VerifyStatus } from "@/lib/assistantBrain";
+import { getPlans, issuePlanCode, getPlanCodes, revokePlanCode, type PlanDef, type PlanCode } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-type Tab = "quotes" | "orders" | "bookings" | "partners" | "settings" | "catalog";
+type Tab = "quotes" | "orders" | "bookings" | "partners" | "settings" | "catalog" | "verify" | "plans";
 const LEAD_STATUSES: LeadStatus[] = ["new", "contacted", "won", "paid", "lost"];
 export default function Admin() {
   const [pw, setPw] = useState(""); const [email, setEmail] = useState("");
@@ -28,6 +30,14 @@ export default function Admin() {
   const [partners, setPartners] = useState<Partner[]>(() => getPartners());
   const [leads, setLeads] = useState<Lead[]>(() => getLeads());
   const [offers, setOffers] = useState<Offer[]>(() => getOffers());
+  const [verifyReqs, setVerifyReqs] = useState<VerifyRequest[]>(() => getVerifyRequests());
+  const [planCodes, setPlanCodes] = useState<PlanCode[]>(() => getPlanCodes());
+  const [issuePlanId, setIssuePlanId] = useState("pro-monthly");
+  const [plansForm, setPlansForm] = useState(() => getPlans().map(pl => ({ id: pl.id, name: pl.name, price: String(pl.priceNgn), days: String(pl.periodDays), blurb: pl.blurb, featuresText: pl.features.join("\n"), active: pl.active })));
+  const patchVerify = (code: string, patch: Partial<VerifyRequest>) => { const next = verifyReqs.map(r => (r.code === code ? { ...r, ...patch } : r)); setVerifyReqs(next); saveVerifyRequests(next); };
+  const openVerify = verifyReqs.filter(r => r.status === "Requested" || r.status === "Pro Assigned").length;
+  const savePlans = async () => { const plans: PlanDef[] = plansForm.map(f => ({ id: f.id, name: f.name.trim() || f.id, priceNgn: Math.max(0, Math.round(parseFloat(f.price) || 0)), periodDays: Math.max(0, Math.round(parseFloat(f.days) || 0)), blurb: f.blurb, features: f.featuresText.split("\n").map(x => x.trim()).filter(Boolean), active: f.active })); const r = await saveSettingsAsync({ plans }); toast.success(r.live ? "Plans saved to the server" : "Plans saved — gates and the Plans page now use them"); };
+  const waCustomer = (phone: string, text: string) => { let d = phone.replace(/\D/g, ""); if (d.startsWith("0")) d = "234" + d.slice(1); return `https://wa.me/${d}?text=${encodeURIComponent(text)}`; };
   const hydrate = async () => {
     const [o, q, b, pa, l, of] = await Promise.all([getOrdersAsync(), getQuotesAsync(), getBookingsAsync(), getPartnersAdminAsync(), getLeadsAsync(), getOffersAsync()]);
     setOrders(o); setQuotes(q); setBookings(b); setPartners(pa); setLeads(l); setOffers(of);
@@ -72,7 +82,7 @@ export default function Admin() {
   const revenue = orders.filter(o => o.status !== "cancelled").reduce((s, o) => s + o.totalNgn, 0);
   const TABS: { id: Tab; label: string }[] = [
     { id: "quotes", label: `Quotes (${quotes.length})` }, { id: "orders", label: `Orders (${orders.length})` },
-    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "catalog", label: "Catalog" },
+    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "verify", label: `Verification (${verifyReqs.length})${openVerify ? ` · ${openVerify} open` : ""}` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "plans", label: "Plans" }, { id: "catalog", label: "Catalog" },
   ];
   const pushOffer = () => {
     const price = parseInt(offerForm.price.replace(/\D/g, ""), 10) || 0;
@@ -84,7 +94,7 @@ export default function Admin() {
   };
   return (<div><PageHead kicker={live ? "Admin — LIVE data" : "Demo Admin — local data only"} title={live ? "Oketex Admin" : "Oketex Admin (Demo)"} lead={live ? "Connected to the production database — quotes, orders, bookings, partners, leads and settings below are the server copies every visitor shares." : "Reads quotes, orders, bookings & partner network data saved in this browser. Demo only — not a real backend."} />
   <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 space-y-8">
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-border border hairline">{[{ l: "Revenue (local orders)", v: formatNGN(revenue) }, { l: "Orders (local)", v: String(orders.length) }, { l: "Quotes (local)", v: String(quotes.length) }, { l: "Bookings (local)", v: String(bookings.length) }, { l: "Partners", v: String(partners.length) }, { l: "Network leads", v: String(leads.length) }, { l: "Commission earned (paid)", v: formatNGN(commissionEarned) }, { l: "Products live", v: String(products.length) }].map(c => (<div key={c.l} className="bg-background p-5"><div className="font-display font-bold text-2xl text-primary">{c.v}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">{c.l}</div></div>))}</div>
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-border border hairline">{[{ l: "Revenue (local orders)", v: formatNGN(revenue) }, { l: "Orders (local)", v: String(orders.length) }, { l: "Quotes (local)", v: String(quotes.length) }, { l: "Bookings (local)", v: String(bookings.length) }, { l: "Partners", v: String(partners.length) }, { l: "Network leads", v: String(leads.length) }, { l: "Commission earned (paid)", v: formatNGN(commissionEarned) }, { l: "Products live", v: String(products.length) }, { l: "Verify requests open", v: String(openVerify) }].map(c => (<div key={c.l} className="bg-background p-5"><div className="font-display font-bold text-2xl text-primary">{c.v}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">{c.l}</div></div>))}</div>
     <div className="flex items-center gap-4 flex-wrap"><ModeBadge />{live && <button className="font-tech text-[11px] text-primary cursor-pointer uppercase tracking-widest" onClick={() => { void fetchServerSettings(); refresh(); }}>Reload server data</button>}</div>
     <div className="flex gap-px bg-border border hairline w-fit flex-wrap">{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 font-tech text-xs uppercase tracking-widest cursor-pointer ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-background hover:text-primary"}`}>{t.label}</button>))}</div>
 
@@ -228,6 +238,42 @@ export default function Admin() {
       </section>
       <p className="font-tech text-[11px] text-muted-foreground">{live ? <>LIVE mode: saving here writes the settings document to the server (key <span className="text-primary">site</span>) and every visitor picks it up. A local copy is kept as cache.</> : <>Demo mode: settings live in this browser (localStorage, key <span className="text-primary">oketex-settings</span>) — they affect this device only. When the backend is live, the same saves go to the server so one change updates every visitor.</>}</p>
     </div>)}
+
+    {tab === "verify" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Verification Requests ({verifyReqs.length})</h2>
+      <p className="font-tech text-xs text-muted-foreground mb-4">Customers who asked a pro to verify an assistant quotation. Each request also created a Quote Verification Visit booking. Update the status as the job moves; record the pro note and the final confirmed total, then notify the customer on WhatsApp.</p>
+      {!verifyReqs.length ? <p className="font-tech text-sm text-muted-foreground">None yet — customers request pro checks from the Assistant's quotation flow.</p> : <div className="space-y-4">{verifyReqs.map(r => (<div key={r.code} className="border hairline bg-card p-5">
+        <div className="flex flex-wrap gap-3 justify-between"><div><p className="font-tech font-semibold">{r.code} — {r.name} ({r.phone}){r.priority && <span className="ml-2 font-tech text-[10px] border border-primary text-primary px-2 py-0.5 uppercase tracking-widest">Priority — Pro plan</span>}</p>
+        <p className="font-tech text-[11px] text-muted-foreground mt-1">Quote {r.quoteCode} · {r.address} · Preferred: {r.preferredDate || "ASAP"} · Requested {new Date(r.createdAt).toLocaleString("en-NG")}</p></div>
+        <span className="font-tech text-xs border hairline px-2.5 py-1 h-fit">{r.status}</span></div>
+        <div className="flex flex-wrap gap-2 mt-4">{VERIFY_STATUSES.map(st => (<button key={st} onClick={() => patchVerify(r.code, { status: st as VerifyStatus })} className={`font-tech text-[11px] border px-3 py-1.5 cursor-pointer ${r.status === st ? "bg-primary text-primary-foreground border-primary" : "hairline hover:border-primary hover:text-primary"}`}>{st}</button>))}</div>
+        <div className="grid md:grid-cols-[1fr_220px] gap-3 mt-4">
+          <input defaultValue={r.proNote} onBlur={e => patchVerify(r.code, { proNote: e.target.value })} placeholder="Pro note — verified measurements, site findings…" className="field-tech font-tech" aria-label="Pro note" />
+          <input defaultValue={r.finalTotal ?? ""} type="number" onBlur={e => patchVerify(r.code, { finalTotal: e.target.value ? parseFloat(e.target.value) : null })} placeholder="Final confirmed total ₦" className="field-tech font-tech" aria-label="Final total" />
+        </div>
+        <div className="mt-4"><a target="_blank" rel="noreferrer" href={waCustomer(r.phone, `Hello ${r.name}, update on your Oketex pro check ${r.code} (quote ${r.quoteCode}): status — ${r.status}.${r.finalTotal ? ` Final confirmed total: ${formatNGN(r.finalTotal)}.` : ""}${r.proNote ? ` Note: ${r.proNote}` : ""}`)} className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary inline-block">Notify customer on WhatsApp</a></div>
+      </div>))}</div>}</section>)}
+
+    {tab === "plans" && (<div className="space-y-10"><section><h2 className="font-display font-bold uppercase text-2xl mb-4">Subscription Plans</h2>
+      <p className="font-tech text-xs text-muted-foreground mb-4">These plans drive the /plans page and every Pro gate. Admin and business accounts always have full access free — plans never apply to you. Prices are launch defaults; change them here any time (existing activations keep their terms until expiry).</p>
+      <div className="space-y-4">{plansForm.map((f, ix) => (<div key={f.id} className="border hairline bg-card p-5">
+        <div className="flex flex-wrap gap-3 items-center justify-between"><p className="font-tech font-semibold">{f.id}</p><label className="flex items-center gap-2 font-tech text-xs"><input type="checkbox" checked={f.active} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, active: e.target.checked } : x)))} /> Active</label></div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+          <div><label className="label-tech">Name</label><input value={f.name} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, name: e.target.value } : x)))} className="field-tech font-tech" /></div>
+          <div><label className="label-tech">Price (₦)</label><input type="number" value={f.price} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, price: e.target.value } : x)))} className="field-tech font-tech" /></div>
+          <div><label className="label-tech">Period (days, 0 = forever)</label><input type="number" value={f.days} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, days: e.target.value } : x)))} className="field-tech font-tech" /></div>
+          <div><label className="label-tech">Blurb</label><input value={f.blurb} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, blurb: e.target.value } : x)))} className="field-tech font-tech" /></div>
+        </div>
+        <div className="mt-3"><label className="label-tech">Features (one per line — list ONLY features that exist)</label><textarea value={f.featuresText} onChange={e => setPlansForm(pf => pf.map((x, i) => (i === ix ? { ...x, featuresText: e.target.value } : x)))} className="field-tech font-tech min-h-[110px]" /></div>
+      </div>))}</div>
+      <Button className="rounded-none font-display uppercase mt-5" onClick={() => void savePlans()}>Save plans</Button></section>
+
+      <section><h2 className="font-display font-bold uppercase text-2xl mb-4">Activation Codes</h2>
+      <p className="font-tech text-xs text-muted-foreground mb-4">A customer pays on WhatsApp (or in the office) → you issue a code here → they redeem it on /plans or any gate screen. Codes work once only and start counting from redemption.</p>
+      <div className="flex flex-wrap gap-3 items-end"><div><label className="label-tech">Plan</label><select value={issuePlanId} onChange={e => setIssuePlanId(e.target.value)} className="field-tech font-tech bg-background w-56">{getPlans().filter(pl => pl.priceNgn > 0).map(pl => <option key={pl.id} value={pl.id}>{pl.name} — {formatNGN(pl.priceNgn)}</option>)}</select></div>
+      <Button className="rounded-none font-display uppercase" onClick={() => { const rec = issuePlanCode(issuePlanId); setPlanCodes(getPlanCodes()); toast.success(`Code issued: ${rec.code} — send it to the customer`); }}>Issue activation code</Button></div>
+      <div className="border hairline mt-5 divide-y divide-white/10">{planCodes.length === 0 && <p className="px-4 py-5 font-tech text-xs text-muted-foreground">No codes issued yet.</p>}{planCodes.map(c => (<div key={c.code} className="px-4 py-3 flex flex-wrap gap-3 items-center justify-between"><p className="font-tech text-sm"><b>{c.code}</b> · {c.planId} · issued {new Date(c.createdAt).toLocaleDateString("en-NG")}</p>
+        <div className="flex items-center gap-3"><span className="font-tech text-[11px] text-muted-foreground">{c.revoked ? "REVOKED" : c.usedAt ? `Used ${new Date(c.usedAt).toLocaleDateString("en-NG")}` : "Unused"}</span>{!c.usedAt && !c.revoked && <button onClick={() => { revokePlanCode(c.code); setPlanCodes(getPlanCodes()); }} className="font-tech text-[11px] border hairline px-2.5 py-1 hover:border-destructive hover:text-destructive cursor-pointer">Revoke</button>}</div></div>))}</div>
+      </section></div>)}
 
     {tab === "catalog" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Catalog ({products.length} products, {categories.length} categories)</h2><div className="border hairline">{products.map((p, i) => (<div key={p.id} className={`px-5 py-3 flex justify-between text-sm ${i > 0 ? "border-t hairline" : ""}`}><span>{p.name}</span><span className="font-tech">{formatNGN(p.priceNgn)} {p.unit} · stock {p.stock}</span></div>))}</div></section>)}
 

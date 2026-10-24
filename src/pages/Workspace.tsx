@@ -7,6 +7,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatNGN } from "@/lib/money";
 import { BUSINESS } from "@/contracts/constants";
 import { getBusiness, businessWaLink } from "@/lib/settings";
+import { Link } from "react-router";
+import PlanGate, { PlanChip } from "@/components/PlanGate";
+import { useEntitlements, FREE_PROJECT_LIMIT } from "@/lib/plans";
 import { calculateRoof, PROFILES, type RoofResult } from "@/lib/roofEngine";
 import {
   getProProjects, saveProProjects, uid, emptyTakeOffRow, emptyMeasureRow, defaultChecklist,
@@ -37,6 +40,8 @@ export default function Workspace() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProProject[]>(() => getProProjects());
   const [activeId, setActiveId] = useState<string>(() => getProProjects()[0]?.id ?? "");
+  const ent = useEntitlements();
+  const [showPlanLock, setShowPlanLock] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCheck, setNewCheck] = useState("");
   useEffect(() => { saveProProjects(projects); }, [projects]);
@@ -55,6 +60,7 @@ export default function Workspace() {
 
   function patchActive(patch: Partial<ProProject>) { setProjects(ps => ps.map(p => (p.id === active.id ? { ...p, ...patch } : p))); }
   function createProject() {
+    if (!ent.isPro && projects.length >= FREE_PROJECT_LIMIT) { setShowPlanLock(true); return; }
     const name = newName.trim() || `Project ${projects.length + 1}`;
     const p: ProProject = { id: uid(), name, client: "", siteAddress: "", date: new Date().toISOString().slice(0, 10), trade: "Roofer", status: "Measuring", notes: "", takeoff: [emptyTakeOffRow()], measures: [emptyMeasureRow()], checklist: defaultChecklist(), createdAt: new Date().toISOString() };
     setProjects(ps => [p, ...ps]); setActiveId(p.id); setNewName(""); toast.success("Project created");
@@ -100,6 +106,12 @@ export default function Workspace() {
   };
 
   return (<div><PageHead kicker="Pro Workspace — Roofers · Carpenters · Engineers" title="Your site spreadsheet & notes" lead="Projects with a live roof take-off sheet (priced by the same engine as the Pro Calculator), a building measurement sheet for any trade, site notes and a kit checklist. Saved on this device." />
+  <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 flex flex-wrap gap-3 items-center no-print">
+    <Link to="/documents" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary">Pro Documents — notes, quotes, contracts & invoices</Link>
+    <Link to="/roofing-guide" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary">Roofing Guide — styles & measurements</Link>
+    <span className="ml-auto"><PlanChip /></span>
+  </div>
+  {showPlanLock && (<div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 no-print"><PlanGate feature="Unlimited Workspace projects"><span /></PlanGate><div className="text-center mt-3"><button onClick={() => setShowPlanLock(false)} className="font-tech text-xs text-muted-foreground hover:text-primary cursor-pointer">← Back to my project (your existing project keeps working)</button></div></div>)}
   <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid lg:grid-cols-[300px_1fr] gap-8">
     {/* Project list */}
     <aside className="no-print space-y-4">

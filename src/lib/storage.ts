@@ -1,5 +1,5 @@
 export type LocalOrder = { code: string; name: string; phone: string; email?: string; address: string; note?: string; items: { name: string; unit: string; unitPriceNgn: number; quantity: number; lineTotalNgn: number }[]; totalNgn: number; status: string; createdAt: string };
-export type LocalQuote = { code: string; name: string; phone: string; email?: string; note?: string; roofType: string; colour?: string; areaM2: number; estimateNgn: number; boqSummary?: string; status: string; createdAt: string };
+export type LocalQuote = { code: string; name: string; phone: string; email?: string; note?: string; roofType: string; colour?: string; areaM2: number; estimateNgn: number; boqSummary?: string; status: string; createdAt: string; source?: string; rangeLow?: number; rangeHigh?: number };
 function read<T>(key: string): T[] { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) as T[] : []; } catch { return []; } }
 function write<T>(key: string, v: T[]) { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }
 export const getOrders = () => read<LocalOrder>("oketex-orders-v1");

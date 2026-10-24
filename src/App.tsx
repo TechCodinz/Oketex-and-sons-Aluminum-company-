@@ -27,6 +27,9 @@ import PartnerProfile from "./pages/PartnerProfile";
 import Join from "./pages/Join";
 import PartnerStatus from "./pages/PartnerStatus";
 import PaymentReturn from "./pages/PaymentReturn";
+import Documents from "./pages/Documents";
+import RoofingGuide from "./pages/RoofingGuide";
+import Plans from "./pages/Plans";
 export default function App(){
  // Phase 5: probe the backend once; when live, pull the server settings
  // document so admin-set rates/terms/business details win site-wide.
@@ -43,6 +46,9 @@ export default function App(){
   <Route path="/visualizer" element={<Visualizer />} />
   <Route path="/tools" element={<Tools />} />
   <Route path="/workspace" element={<Workspace />} />
+  <Route path="/documents" element={<Documents />} />
+  <Route path="/roofing-guide" element={<RoofingGuide />} />
+  <Route path="/plans" element={<Plans />} />
   <Route path="/book" element={<Book />} />
   <Route path="/partners" element={<Partners />} />
   <Route path="/partners/:code" element={<PartnerProfile />} />

@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
 import ProToolsSections from "@/components/ProToolsSections";
+import { Link } from "react-router";
+import { ArrowRight } from "lucide-react";
 function Num({label,value,set,step="0.1"}:{label:string;value:number;set:(n:number)=>void;step?:string}){ return (<div><label className="label-tech">{label}</label><input type="number" step={step} value={value} onChange={e=>set(parseFloat(e.target.value)||0)} className="field-tech font-tech" /></div>); }
 function Card({title,children,result}:{title:string;children:React.ReactNode;result:React.ReactNode}){ return (<section className="border hairline bg-card p-6"><h3 className="font-display font-bold uppercase text-xl">{title}</h3><div className="grid grid-cols-2 gap-4 mt-5">{children}</div><div className="mt-5 border-t hairline pt-4 font-tech text-sm space-y-1">{result}</div></section>); }
 export default function Tools(){
@@ -29,6 +31,8 @@ export default function Tools(){
    <div><label className="label-tech">Finish</label><select value={finish} onChange={e=>setFinish(Number(e.target.value))} className="field-tech font-tech bg-background w-full"><option value={1}>Mill (×1.0)</option><option value={1.1}>Anodized (×1.1)</option><option value={1.2}>Powder-coated (×1.2)</option></select></div></Card>
   <Card title="(e) Coverage Converter" result={<><p>Stone-coated tiles: {Math.ceil(convArea/0.48).toLocaleString()} tiles</p><p>Longspan (1.0m cover, per slope metre): {(convArea).toFixed(0)} m² ÷ slope — use Pro Calculator for cutting list</p><p>Metcoppo metres ≈ {(convArea/0.96).toFixed(1)} m of width-coverage equivalent</p><p>Corrugated 3m sheets (0.9m cover): ~{Math.ceil(convArea/(3*0.9))} sheets (flat approx, slope increases this)</p><p>Insulation rolls: {Math.ceil(convArea/30)} rolls</p></>}>
    <Num label="Roof area (m²)" value={convArea} set={setConvArea} /><div className="font-tech text-xs text-muted-foreground self-end pb-3">For exact slope-corrected quantities, use the Pro Roof Calculator.</div></Card>
+  <Link to="/roofing-guide" className="border hairline bg-card p-6 block hover:border-primary group"><h3 className="font-display font-bold uppercase text-xl group-hover:text-primary">Roofing Guide — Styles, Methods & Measurements</h3><p className="text-sm text-muted-foreground mt-2">Roof anatomy with every part explained, the styles & patterns library, standard measurements (eaves, fascia, gutters, laps, fixings, pitches) and the eaves-angle / plumb-cut calculator.</p><p className="font-tech text-xs text-primary mt-4 inline-flex items-center gap-2">Open the guide <ArrowRight className="h-3.5 w-3.5" /></p></Link>
+  <Link to="/documents" className="border hairline bg-card p-6 block hover:border-primary group"><h3 className="font-display font-bold uppercase text-xl group-hover:text-primary">Pro Documents — Notes, Quotations, Contracts & Invoices</h3><p className="text-sm text-muted-foreground mt-2">Your paperwork office on your own letterhead: an engineer's notebook, quotation creator, contract writer and digital invoices with balance tracking.</p><p className="font-tech text-xs text-primary mt-4 inline-flex items-center gap-2">Open Pro Documents <ArrowRight className="h-3.5 w-3.5" /></p></Link>
  </div>
  <ProToolsSections />
 </div>);

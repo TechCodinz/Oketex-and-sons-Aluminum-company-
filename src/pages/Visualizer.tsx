@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Download, Play, Pause } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ export default function Visualizer(){
     <text x="24" y="585" fill={light==="night"||light==="dusk"?"#fff":"#222"} fontFamily="monospace" fontSize="15">OKETEX VISUALIZER — {shape.toUpperCase()} · {pattern.toUpperCase()} · {roofColour.name.toUpperCase()} · {sky.label.toUpperCase()}</text>
    </svg>
    </div>
-   <div className="flex flex-wrap gap-3 mt-4"><Button className="rounded-none font-display uppercase" onClick={toggleTour}>{tour?<><Pause className="h-4 w-4 mr-2" /> Stop tour</>:<><Play className="h-4 w-4 mr-2" /> Cinematic Tour</>}</Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={download}><Download className="h-4 w-4 mr-2" /> Download PNG</Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={priceLook}>Price this look →</Button></div>
+   <div className="flex flex-wrap gap-3 mt-4"><Button className="rounded-none font-display uppercase" onClick={toggleTour}>{tour?<><Pause className="h-4 w-4 mr-2" /> Stop tour</>:<><Play className="h-4 w-4 mr-2" /> Cinematic Tour</>}</Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={download}><Download className="h-4 w-4 mr-2" /> Download PNG</Button><Button variant="outline" className="rounded-none font-display uppercase" onClick={priceLook}>Price this look →</Button><Link to="/roofing-guide" className="inline-flex items-center border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary text-sm">Roofing styles & methods guide</Link></div>
    <p className="font-tech text-[11px] text-muted-foreground mt-3">Cinematic Tour cycles Day → Golden Hour → Dusk → Night with a slow pan/zoom. PNG snapshot renders this exact SVG.</p>
   </div>
   <aside className="space-y-6">

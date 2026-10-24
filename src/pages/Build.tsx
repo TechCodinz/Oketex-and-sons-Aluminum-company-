@@ -77,6 +77,7 @@ export default function Build() {
                   {s.supplied && s.shopCat && (<Link to={`/shop?category=${s.shopCat}`} className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90">Shop materials <ArrowRight className="h-4 w-4" /></Link>)}
                   <Link to={`/book?service=${s.bookService}`} className={`inline-flex items-center gap-2 font-display font-semibold uppercase tracking-wider px-5 h-11 ${s.supplied ? "border border-foreground/40 hover:border-primary hover:text-primary" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>{s.bookLabel} <ArrowRight className="h-4 w-4" /></Link>
                   <Link to={s.tool.to} className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-5 h-11 hover:border-primary hover:text-primary">{s.tool.label}</Link>
+                  {s.n === 5 && (<Link to="/roofing-guide" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-5 h-11 hover:border-primary hover:text-primary">Roofing styles, methods & measurements</Link>)}
                   {!s.supplied && (<Link to="/partners" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-5 h-11 hover:border-primary hover:text-primary">Find a pro in the directory <ArrowRight className="h-4 w-4" /></Link>)}
                 </div>
               </div>

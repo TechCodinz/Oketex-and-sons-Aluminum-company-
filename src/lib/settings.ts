@@ -22,6 +22,8 @@ export interface EffectiveBusiness {
   name: string; shortName: string; phone: string; whatsapp: string; email: string; address: string; hours: string;
 }
 export interface OketexSettings {
+  /** Subscription plans (Deliverable F) — full array replaces defaults when set. PlanDef lives in lib/plans.ts. */
+  plans?: import("./plans").PlanDef[];
   partnerTerms?: Partial<EffectivePartnerTerms>;
   rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number };
   business?: Partial<Pick<EffectiveBusiness, "phone" | "whatsapp" | "email" | "address" | "hours">>;
@@ -49,6 +51,7 @@ export function getSettings(): OketexSettings {
   const server = parseKey(SERVER_KEY);
   if (!Object.keys(server).length) return local;
   return {
+    plans: server.plans ?? local.plans,
     partnerTerms: { ...local.partnerTerms, ...server.partnerTerms },
     rates: {
       ...local.rates, ...server.rates,
@@ -59,6 +62,7 @@ export function getSettings(): OketexSettings {
 }
 export function saveSettings(patch: OketexSettings) {
   const next: OketexSettings = {
+    plans: patch.plans ?? getSettings().plans,
     partnerTerms: { ...getSettings().partnerTerms, ...patch.partnerTerms },
     rates: {
       ...getSettings().rates, ...patch.rates,
