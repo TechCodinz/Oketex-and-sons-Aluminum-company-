@@ -66,6 +66,23 @@ export const TAB_ROLES: Record<AdminTabId, StaffRole[]> = {
   maintenance: ["admin", "maintenance", "production_manager"],
   supply: ["admin", "operations", "store", "accounts"],
 };
+/** Admin tab sections (2026-10-25 visibility fix): the tab bar renders
+ *  grouped under these labels so 20+ workspaces stay discoverable.
+ *  Every tab belongs to exactly one section; sections with no tab
+ *  visible to the signed-in role are hidden entirely. */
+export const TAB_SECTIONS = ["Front Office", "Work & Partners", "Factory", "System"] as const;
+export type TabSection = (typeof TAB_SECTIONS)[number];
+export const TAB_SECTION: Record<AdminTabId, TabSection> = {
+  orders: "Front Office", bookings: "Front Office", quotes: "Front Office",
+  catalog: "Front Office", reviews: "Front Office", notifications: "Front Office",
+  verify: "Front Office",
+  partners: "Work & Partners", jobs: "Work & Partners", snap: "Work & Partners",
+  supply: "Work & Partners",
+  production: "Factory", operator: "Factory", qc: "Factory", stock: "Factory",
+  dispatch: "Factory", maintenance: "Factory",
+  ops: "System", staff: "System", activity: "System", plans: "System",
+  settings: "System",
+};
 export function roleCanSeeTab(role: string | null | undefined, tab: AdminTabId): boolean {
   if (!role) return false;
   if (role === "admin") return true;

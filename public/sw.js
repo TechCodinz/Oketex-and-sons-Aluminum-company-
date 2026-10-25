@@ -1,9 +1,9 @@
-/* Oketex service worker — versioned cache "oketex-v1".
+/* Oketex service worker — versioned cache "oketex-v2".
  * Strategy: precache the app shell routes; cache-first for static assets
  * (images/css/js/fonts); network-first for page navigations with a cached
  * fallback when offline. API calls are NEVER cached — live data must always
  * come from the network (or the app's own localStorage demo mode). */
-const CACHE = "oketex-v1";
+const CACHE = "oketex-v2";
 const SHELL = [
   "/", "/shop", "/quote", "/estimator", "/visualizer", "/tools", "/build",
   "/workspace", "/documents", "/book", "/partners", "/jobs", "/prices",

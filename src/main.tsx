@@ -12,6 +12,21 @@ createRoot(document.getElementById('root')!).render(
 // never caches /api/* and falls back to the cached shell offline.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => { /* SW is an enhancement, never a blocker */ });
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      // Self-apply future deploys: when a NEW worker finishes installing
+      // while this page is still controlled by the old one, reload ONCE
+      // (sessionStorage guard prevents any reload loop) so returning
+      // visitors never sit on a stale cached build.
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller && !sessionStorage.getItem("oketex-sw-reloaded")) {
+            sessionStorage.setItem("oketex-sw-reloaded", "1");
+            window.location.reload();
+          }
+        });
+      });
+    }).catch(() => { /* SW is an enhancement, never a blocker */ });
   });
 }
