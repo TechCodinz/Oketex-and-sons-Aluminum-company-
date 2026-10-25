@@ -5,7 +5,10 @@ import { apiFetch, probeApi } from "./api";
 
 export interface AuthUser {
   id: number | string; name: string; email: string; phone?: string;
-  role: "customer" | "partner" | "admin"; partnerCode?: string | null;
+  /** "customer" | "partner" | a staff role (see lib/staff.ts STAFF_ROLES —
+   *  "admin" is the owner). Typed as string: the role catalogue lives in
+   *  staff.ts and the session endpoints validate it server-side. */
+  role: string; partnerCode?: string | null; active?: boolean;
 }
 
 let cached: AuthUser | null | undefined = undefined;

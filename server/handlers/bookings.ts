@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { bookingFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 // POST (public) → create booking. GET ?code= | ?phone= → lookups (track
 // page + account). GET (admin, no query) → all. PATCH (admin) → {code,status}.
 export default wrap(async (req: any, res: any) => {
@@ -28,12 +28,14 @@ export default wrap(async (req: any, res: any) => {
       const rows = await dbQuery(`SELECT * FROM bookings WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE '%' || $1 ORDER BY created_at DESC`, [phone.slice(-10)]);
       return sendJson(res, 200, { bookings: rows.map(bookingFromRow) });
     }
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "sales", "operations", "field"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const rows = await dbQuery(`SELECT * FROM bookings ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { bookings: rows.map(bookingFromRow) });
   }
   if (req.method === "PATCH") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "sales", "operations", "field"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const b = await readJson(req);
     if (!b.code || !["pending", "confirmed", "scheduled", "completed", "cancelled"].includes(b.status)) return sendJson(res, 400, { error: "Missing code or bad status" });
     const rows = await dbQuery(`UPDATE bookings SET status = $1 WHERE code = $2 RETURNING *`, [b.status, String(b.code).toUpperCase()]);

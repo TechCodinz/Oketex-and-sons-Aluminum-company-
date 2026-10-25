@@ -16,12 +16,12 @@ export function lowestPrice(p: Partner): number | null {
 
 export function PartnerCard({ p }: { p: Partner }) {
   const from = lowestPrice(p);
-  const tags = p.role === "pro" ? p.trades : p.categories;
+  const tags = p.role === "pro" ? p.trades : p.role === "seller" ? p.categories : [...p.trades, ...p.categories];
   return (
     <div className={cn("border hairline bg-card p-6 flex flex-col relative", p.featured && "border-primary/70")}>
       {p.featured && <span className="absolute -top-3 left-4 bg-primary text-primary-foreground font-tech text-[10px] uppercase tracking-widest px-2 py-1 inline-flex items-center gap-1"><Star className="h-3 w-3" /> Featured</span>}
       <div className="flex items-start justify-between gap-3">
-        <span className={cn("font-tech text-[10px] uppercase tracking-widest px-2 py-1 border", p.role === "pro" ? "border-sky-500/40 text-sky-400" : "border-violet-500/40 text-violet-400")}>{p.role === "pro" ? "Pro" : "Seller"}</span>
+        <span className={cn("font-tech text-[10px] uppercase tracking-widest px-2 py-1 border", p.role === "pro" ? "border-sky-500/40 text-sky-400" : "border-violet-500/40 text-violet-400")}>{p.role === "pro" ? "Pro" : p.role === "seller" ? "Seller" : "Pro + Seller"}</span>
         {p.sample && <span className="font-tech text-[10px] uppercase tracking-widest text-yellow-400 border border-yellow-500/40 px-2 py-1">Sample listing</span>}
       </div>
       <h3 className="font-display font-bold uppercase text-xl mt-4 leading-tight flex items-center gap-2">{p.businessName}{p.verified && <BadgeCheck className="h-5 w-5 text-primary shrink-0" aria-label="Verified by Oketex" />}</h3>
@@ -34,7 +34,7 @@ export function PartnerCard({ p }: { p: Partner }) {
       <div className="flex flex-wrap gap-1.5 mt-3">{tags.map(t => <span key={t} className="border hairline px-2 py-1 font-tech text-[10px] uppercase tracking-wider">{t}</span>)}</div>
       <p className="text-sm text-muted-foreground mt-3 line-clamp-3 flex-1">{p.bio}</p>
       {from !== null && <p className="font-tech text-sm mt-4">From <span className="text-primary font-semibold">{formatNGN(from)}</span>{p.products[0] ? ` ${p.products.reduce((a, b) => (b.priceNgn < a.priceNgn ? b : a)).unit}` : ""} · {p.products.length} products listed</p>}
-      <Link to={`/partners/${p.code}`} className="inline-flex items-center gap-2 mt-5 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90 w-fit">View {p.role === "pro" ? "profile" : "storefront"} <ArrowRight className="h-4 w-4" /></Link>
+      <Link to={`/partners/${p.code}`} className="inline-flex items-center gap-2 mt-5 bg-primary text-primary-foreground font-display font-semibold uppercase tracking-wider px-5 h-11 hover:bg-primary/90 w-fit">View {p.role === "seller" ? "storefront" : "profile"} <ArrowRight className="h-4 w-4" /></Link>
     </div>
   );
 }
@@ -52,7 +52,7 @@ export default function Partners() {
   const list = useMemo(() => {
     const s = search.trim().toLowerCase(), l = loc.trim().toLowerCase();
     return all.filter(p =>
-      (role === "all" || p.role === role) &&
+      (role === "all" || p.role === role || p.role === "both") &&
       (!tag || p.trades.includes(tag) || p.categories.includes(tag)) &&
       (!l || `${p.location} ${p.areas}`.toLowerCase().includes(l)) &&
       (!s || `${p.businessName} ${p.bio} ${p.trades.join(" ")} ${p.categories.join(" ")} ${p.products.map(x => x.name).join(" ")}`.toLowerCase().includes(s))

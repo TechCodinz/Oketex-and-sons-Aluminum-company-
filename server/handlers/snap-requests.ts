@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { snapRequestFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 import { loadSnap, saveSnap, pushTimeline, snapDigits, snapPhoneMatches, SNAP_STATUSES } from "../snapStore.js";
 // Snap & Send requests (src/lib/snapRequests.ts).
 // POST (public) → create, status Received.
@@ -44,7 +44,9 @@ export default wrap(async (req: any, res: any) => {
   if (req.method === "GET") {
     const q = req.query || {};
     if (String(q.all || "") === "1") {
-      if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+      // The admin queue: owner + operations run it; sales work the intake.
+      const gate = await requireRole(req, ["admin", "operations", "sales"]);
+      if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
       const rows = await dbQuery(`SELECT * FROM snap_requests ORDER BY created_at DESC LIMIT 500`);
       return sendJson(res, 200, { requests: rows.map((r: any) => snapRequestFromRow(r)) });
     }
@@ -100,7 +102,8 @@ export default wrap(async (req: any, res: any) => {
       return sendJson(res, 200, { request: await saveSnap(rec) });
     }
     if (action === "decline" || action === "status" || action === "timeline") {
-      if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+      const gate = await requireRole(req, ["admin", "operations"]);
+      if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
       if (action === "decline") {
         const note = String(b.note || "").trim();
         rec = pushTimeline({ ...rec, status: "Declined" }, "admin", note ? `Declined by Oketex: ${note}` : "Declined by Oketex.");

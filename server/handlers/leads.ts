@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { leadFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 import { getServerPartnerTerms, commissionForValue } from "../siteSettings.js";
 // POST (public) → create a lead; commission % is snapshotted from the
 //   EFFECTIVE server terms at creation, exactly like the demo store.
@@ -32,12 +32,15 @@ export default wrap(async (req: any, res: any) => {
       const rows = await dbQuery(`SELECT * FROM leads WHERE partner_code = $1 ORDER BY created_at DESC`, [partnerCode]);
       return sendJson(res, 200, { leads: rows.map(leadFromRow) });
     }
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    // Staff System: owner + operations + sales (leads view) + accounts (revenue).
+    const gate = await requireRole(req, ["admin", "operations", "sales", "accounts"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const rows = await dbQuery(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { leads: rows.map(leadFromRow) });
   }
   if (req.method === "PATCH" || req.method === "DELETE") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "operations", "sales"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     if (req.method === "DELETE") {
       const id = String(req.query?.id || "");
       if (!id) return sendJson(res, 400, { error: "Missing lead id" });

@@ -1,6 +1,6 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../../http.js";
 import { dbQuery, isDbConfigured } from "../../db.js";
-import { isAdmin } from "../../auth.js";
+import { requireRole, roleErrorBody } from "../../auth.js";
 import { loadSnap, saveSnap, pushTimeline, ngn } from "../../snapStore.js";
 import { getServerPartnerTerms, commissionForValue } from "../../siteSettings.js";
 // POST /api/snap-requests/assign (admin) — assign a priced/approved Snap &
@@ -11,7 +11,8 @@ import { getServerPartnerTerms, commissionForValue } from "../../siteSettings.js
 export default wrap(async (req: any, res: any) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
-  if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+  const gate = await requireRole(req, ["admin", "operations"]);
+  if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
   const b = await readJson(req);
   const code = String(b.code || "").trim().toUpperCase();
   const partnerCode = String(b.partnerCode || "").trim().toUpperCase();

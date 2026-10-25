@@ -15,5 +15,5 @@ export default wrap(async (req: any, res: any) => {
     await dbQuery(stmt);
     done.push(stmt.replace(/\s+/g, " ").slice(0, 60));
   }
-  return sendJson(res, 200, { ok: true, statementsApplied: done.length, tables: ["users", "partners", "leads", "bookings", "orders", "quotes", "payments", "settings", "offers", "jobs", "bids", "reviews", "notifications"] });
+  return sendJson(res, 200, { ok: true, statementsApplied: done.length, tables: ["users", "partners", "leads", "bookings", "orders", "quotes", "payments", "settings", "offers", "jobs", "bids", "reviews", "notifications", "snap_requests", "activity_log", "production_jobs", "supply_requests"] });
 });

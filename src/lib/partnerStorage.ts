@@ -14,6 +14,10 @@ export interface Partner {
   trades: string[]; categories: string[];
   yearsExperience?: number; cacNumber?: string; bio: string;
   products: PartnerProduct[];
+  /** Stage S3 (two-way flow): what this partner can supply OKETEX — items
+   *  and equipment they sell or hire out. Admin picks supply-request targets
+   *  from these; shown in the Admin Partners detail. */
+  supplyCapabilities?: string[];
   status: PartnerStatus; verified: boolean; featured: boolean; sample?: boolean;
   /** Snap & Send: is this partner open to job assignments? Default true —
    *  absent means available (records created before the field existed). */
@@ -41,28 +45,32 @@ function read<T>(key: string): T[] { try { const r = localStorage.getItem(key); 
 function write(key: string, list: unknown[]) { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* ignore */ } }
 
 // ---------------- Sample partners (clearly labelled SAMPLE listings) ----------------
+// Sample listings carry NO phone/email: contact for every partner — sample
+// or real — goes through Oketex admin (Admin-Routing rule), so no partner
+// number is ever published on a public surface.
 function samplePartners(): Partner[] {
   const now = new Date().toISOString();
   return [
     {
       code: "PRT-2026-SAMPLE1", role: "pro", businessName: "Adebayo Roofing Works", contactName: "Adebayo Ogunleye",
-      phone: "+234 803 555 0101", location: "Lekki, Lagos", areas: "Lekki, Ajah, Ikeja, Lagos Mainland",
+      phone: "", location: "Lekki, Lagos", areas: "Lekki, Ajah, Ikeja, Lagos Mainland",
       trades: ["Roofer", "Carpenter"], categories: [], yearsExperience: 11, cacNumber: "",
       bio: "Sample listing — specialist longspan and stone-coated installation crew. Roof structure carpentry, sheet fixing, ridge and gutter work with photo reports on every job.",
       products: [], status: "approved", verified: true, featured: true, sample: true, createdAt: now,
     },
     {
       code: "PRT-2026-SAMPLE2", role: "pro", businessName: "Engr. Musa Structural Services", contactName: "Engr. Musa Abdullahi",
-      phone: "+234 803 555 0102", location: "Gwarinpa, Abuja", areas: "Abuja FCT, Nasarawa, Niger",
+      phone: "", location: "Gwarinpa, Abuja", areas: "Abuja FCT, Nasarawa, Niger",
       trades: ["Engineer", "Builder", "Surveyor"], categories: [], yearsExperience: 14, cacNumber: "",
       bio: "Sample listing — structural design, setting-out and site supervision for residential and commercial builds. COREN-registered practice (verify credentials on engagement).",
       products: [], status: "approved", verified: true, featured: false, sample: true, createdAt: now,
     },
     {
       code: "PRT-2026-SAMPLE3", role: "seller", businessName: "Ibafo Roofing Depot", contactName: "Mrs. F. Okonkwo",
-      phone: "+234 803 555 0103", location: "Ibafo, Ogun State", areas: "Ibafo, Mowe, Berger, Lagos delivery daily",
+      phone: "", location: "Ibafo, Ogun State", areas: "Ibafo, Mowe, Berger, Lagos delivery daily",
       trades: [], categories: ["Roofing Materials", "General Building Materials"],
       bio: "Sample listing — wholesale and retail roofing sheets, stone-coated tiles and accessories with same-day cutting and delivery along the Lagos–Ibadan expressway.",
+      supplyCapabilities: ["Longspan aluminium sheets 0.45mm/0.55mm", "Stone-coated tiles", "Ridge caps & flashing", "Roofing screws & fasteners (sample capabilities)"],
       products: [
         { id: uid(), name: "Longspan Aluminium Sheet 0.45mm", priceNgn: 9900, unit: "per metre" },
         { id: uid(), name: "Stone-Coated Classic Bond Tile", priceNgn: 7100, unit: "per tile" },
@@ -73,9 +81,10 @@ function samplePartners(): Partner[] {
     },
     {
       code: "PRT-2026-SAMPLE4", role: "seller", businessName: "Lekki Tiles & Finishing Hub", contactName: "Chinedu E.",
-      phone: "+234 803 555 0104", location: "Sangotedo, Lagos", areas: "Lekki–Ajah axis, delivery across Lagos",
+      phone: "", location: "Sangotedo, Lagos", areas: "Lekki–Ajah axis, delivery across Lagos",
       trades: [], categories: ["Tiles", "Paint"],
       bio: "Sample listing — floor and wall tiles, sanitary-finish paints and tiling consumables. Showroom samples available; tilers can be recommended on request.",
+      supplyCapabilities: ["Floor & wall tiles", "Tile adhesive & grout", "Emulsion paint (sample capabilities)"],
       products: [
         { id: uid(), name: "600×600 Glazed Floor Tile", priceNgn: 2600, unit: "per tile" },
         { id: uid(), name: "Tile Adhesive 20kg", priceNgn: 6800, unit: "per bag" },
@@ -85,9 +94,10 @@ function samplePartners(): Partner[] {
     },
     {
       code: "PRT-2026-SAMPLE5", role: "seller", businessName: "Ibadan Timber & Boards Market Ltd", contactName: "Alhaji R. Balogun",
-      phone: "+234 803 555 0105", location: "Bodija, Ibadan", areas: "Ibadan, Oyo State, Osun delivery",
+      phone: "", location: "Bodija, Ibadan", areas: "Ibadan, Oyo State, Osun delivery",
       trades: [], categories: ["Timber", "Cement & Blocks"],
       bio: "Sample listing — treated roofing timber, formwork boards, marine ply and sandcrete blocks ex-yard. Bulk rates for estate projects.",
+      supplyCapabilities: ["Treated roofing timber", "Marine plywood & formwork boards", "Sandcrete blocks", "Generator hire (sample capabilities)"],
       products: [
         { id: uid(), name: "Treated Timber 2×4 (3.6m)", priceNgn: 3200, unit: "per length" },
         { id: uid(), name: "Marine Plywood 18mm", priceNgn: 28500, unit: "per sheet" },
@@ -159,13 +169,21 @@ export function offersForRole(role: PartnerRole): Offer[] {
 
 // ---------------- Phase 5: API-first wrappers (demo fallback) ----------------
 import { apiFetch, probeApi } from "./api";
-/** Public directory list: server (approved only) when live, else local. */
+/** PUBLIC partner shape (Admin-Routing rule): phone + email stripped.
+ *  Public surfaces (directory, profile, tracking) only ever work with this
+ *  shape — all contact is routed through Oketex admin. The partner's own
+ *  dashboard uses findPartnerOwnerAsync (phone-proofed) instead. */
+export function toPublicPartner(p: Partner): Partner {
+  return { ...p, phone: "", email: undefined };
+}
+/** Public directory list: server (approved only) when live, else local.
+ *  Always returned in the PUBLIC shape (no partner phone/email). */
 export async function getPartnersAsync(): Promise<Partner[]> {
   if (await probeApi()) {
-    try { const { partners } = await apiFetch<{ partners: Partner[] }>("/api/partners"); return partners; }
+    try { const { partners } = await apiFetch<{ partners: Partner[] }>("/api/partners"); return partners.map(toPublicPartner); }
     catch { /* fall through */ }
   }
-  return getPartners().filter(p => p.status === "approved");
+  return getPartners().filter(p => p.status === "approved").map(toPublicPartner);
 }
 /** Admin list (all statuses incl. pending). Requires an admin session when live. */
 export async function getPartnersAdminAsync(): Promise<Partner[]> {
@@ -175,12 +193,36 @@ export async function getPartnersAdminAsync(): Promise<Partner[]> {
   }
   return getPartners();
 }
+/** PUBLIC single-partner lookup (profile pages) — stripped shape. */
 export async function findPartnerAsync(code: string): Promise<Partner | undefined> {
   if (await probeApi()) {
-    try { const { partner } = await apiFetch<{ partner: Partner }>(`/api/partners/${encodeURIComponent(code.trim().toUpperCase())}`); return partner; }
+    try { const { partner } = await apiFetch<{ partner: Partner }>(`/api/partners/${encodeURIComponent(code.trim().toUpperCase())}`); return partner ? toPublicPartner(partner) : undefined; }
     catch { /* fall through (incl. server 404) */ }
   }
-  return findPartner(code);
+  const p = findPartner(code);
+  return p ? toPublicPartner(p) : undefined;
+}
+/** OWNER lookup for /partner-status: the full record (incl. phone/email)
+ *  is released only against the phone number the partner registered with —
+ *  the same last-10 proof the server applies (phone goes as a query param
+ *  when live; checked against the local record in demo mode). Sample
+ *  listings carry no phone, so in demo mode the code alone opens them.
+ *  Returns undefined when the proof fails. */
+export async function findPartnerOwnerAsync(code: string, phone: string): Promise<Partner | undefined> {
+  const c = code.trim().toUpperCase();
+  if (!c) return undefined;
+  if (await probeApi()) {
+    try {
+      const { partner } = await apiFetch<{ partner: Partner }>(`/api/partners/${encodeURIComponent(c)}?phone=${encodeURIComponent(phone.trim())}`);
+      return partner && partner.phone ? partner : undefined;
+    } catch { /* fall through to the local record */ }
+  }
+  const p = findPartner(c);
+  if (!p) return undefined;
+  const stored = p.phone.replace(/\D/g, "");
+  if (!stored) return p.sample ? p : undefined;
+  const given = phone.replace(/\D/g, "");
+  return given.length >= 7 && stored.length >= 10 && stored.endsWith(given.slice(-10)) ? p : undefined;
 }
 export async function addPartnerAsync(p: Partner): Promise<void> {
   if (await probeApi()) {

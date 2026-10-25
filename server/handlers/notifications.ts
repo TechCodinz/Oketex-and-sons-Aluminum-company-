@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { notificationFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 // Notification log (Phase 6). The frontend fires notify() on business
 // events (booking, lead, order, invoice, verification, job); each record is
 // stored here when the backend is live. Sending is a SEPARATE step — see
@@ -32,12 +32,15 @@ export default wrap(async (req: any, res: any) => {
     return sendJson(res, 201, { notification: notificationFromRow(rows[0]) });
   }
   if (req.method === "GET") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    // Owner + support run the outbox (Staff System role gate).
+    const gate = await requireRole(req, ["admin", "support"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const rows = await dbQuery(`SELECT * FROM notifications ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { notifications: rows.map(notificationFromRow) });
   }
   if (req.method === "PATCH") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "support"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const b = await readJson(req);
     if (!b.id || !STATUSES.includes(b.status)) return sendJson(res, 400, { error: "Missing id or bad status" });
     const rows = await dbQuery(`UPDATE notifications SET status = $1 WHERE id = $2 RETURNING *`, [b.status, b.id]);

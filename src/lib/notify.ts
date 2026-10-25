@@ -22,7 +22,9 @@ export type NotifyTemplateKey =
   | "booking_created" | "lead_created_admin" | "lead_created_partner"
   | "verify_requested" | "invoice_sent" | "order_placed"
   | "job_posted" | "bid_accepted"
-  | "snap_received" | "snap_priced" | "snap_assigned_partner" | "snap_assigned_customer" | "snap_completed";
+  | "snap_received" | "snap_priced" | "snap_assigned_partner" | "snap_assigned_customer" | "snap_completed"
+  | "chase_snap_approval" | "chase_partner_progress" | "chase_invoice_payment" | "chase_operator_stale"
+  | "supply_requested" | "supply_quoted" | "supply_won";
 export interface NotifyVars {
   business?: string; code?: string; amount?: string; total?: string; balance?: string;
   name?: string; phone?: string; partner?: string; service?: string; date?: string;
@@ -44,6 +46,16 @@ export const NOTIFY_TEMPLATES: Record<NotifyTemplateKey, string> = {
   snap_assigned_partner: "Hello {partner}, you have been assigned Snap & Send job {code} via {business} at the agreed price {amount}. Customer: {name}, {phone}. Site: {address}. Open Partner Status to see the map and post progress updates.",
   snap_assigned_customer: "Hello {name}, good news — {business} assigned {partner} to your Snap & Send job {code} at the agreed price {amount}. Follow progress in Track on our site.",
   snap_completed: "Snap & Send job {code} at {business} was marked complete by {partner}. Customer: {name} ({phone}). Please confirm with the customer.",
+  // Ops Agent chasers (Staff System, 2026-10-25) — drafted by the agent,
+  // sent by a human's tap, never autonomously.
+  chase_snap_approval: "Hello {name}, a gentle reminder from {business}: your Snap & Send job {code} is priced at {amount} and waiting for your approval. Open Track on our site, enter your code, review the breakdown and tap Approve — or reply here and we will help.",
+  chase_partner_progress: "Hello {partner}, {business} is checking in on Snap & Send job {code} — no progress update has been posted in over 48 hours. Please open Partner Status and post an update so the customer stays informed.",
+  chase_invoice_payment: "Hello {name}, a reminder from {business}: invoice {code} has a balance of {balance} which was due on {due}. Please arrange payment, or contact the office if you need the details again. Thank you.",
+  chase_operator_stale: "Hello {name}, production job {code} ({title}) has been In Production for over 48 hours without a finish update. Please check the job card and update the floor board.",
+  // Partner two-way flow (Stage S3) — procurement, no commission involved.
+  supply_requested: "Hello {partner}, {business} needs a supply quote: {title} (ref {code}). Open Partner Status → Supply Requests to see the spec and send your price.",
+  supply_quoted: "Supply quote received for {code} at {business}: {partner} quoted {amount}. See Admin → Supply to compare quotes.",
+  supply_won: "Hello {partner}, good news — {business} approved your quote for supply request {code} at {amount}. Please confirm delivery timing with the office.",
 };
 export function renderTemplate(key: NotifyTemplateKey, vars: NotifyVars): string {
   const tpl = NOTIFY_TEMPLATES[key] || "";

@@ -1,6 +1,6 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
-import { partnerFromRow } from "../records.js";
+import { partnerFromRow, publicPartnerFromRow } from "../records.js";
 // GET  → public directory list (approved only).
 // POST → partner registration; always lands as status 'pending'.
 // PATCH {code, phone, available} → partner self-service availability toggle
@@ -22,7 +22,9 @@ export default wrap(async (req: any, res: any) => {
   }
   if (req.method === "GET") {
     const rows = await dbQuery(`SELECT * FROM partners WHERE status = 'approved' ORDER BY featured DESC, verified DESC, created_at DESC`);
-    return sendJson(res, 200, { partners: rows.map(partnerFromRow) });
+    // PUBLIC list — phone/email stripped (Admin-Routing rule): customers
+    // reach partners only through Oketex admin.
+    return sendJson(res, 200, { partners: rows.map(publicPartnerFromRow) });
   }
   if (req.method === "POST") {
     const p = await readJson(req);
@@ -35,7 +37,7 @@ export default wrap(async (req: any, res: any) => {
     const rows = await dbQuery(
       `INSERT INTO partners (code, role, business_name, contact_name, phone, email, location, areas, status, data)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9::jsonb) RETURNING *`,
-      [code, p.role === "seller" ? "seller" : "pro", p.businessName, p.contactName || "", p.phone, p.email || null, p.location || "", p.areas || "", JSON.stringify(data)],
+      [code, p.role === "seller" ? "seller" : p.role === "both" ? "both" : "pro", p.businessName, p.contactName || "", p.phone, p.email || null, p.location || "", p.areas || "", JSON.stringify(data)],
     );
     return sendJson(res, 201, { partner: partnerFromRow(rows[0]) });
   }

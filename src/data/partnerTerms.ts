@@ -16,7 +16,7 @@ export const PARTNER_TERMS = {
   currencyNote: "All fees and commissions are in Nigerian Naira (₦). Commission is payable by the partner to Oketex only on leads marked Won, settled after the customer pays the partner.",
 } as const;
 
-export type PartnerRole = "pro" | "seller";
+export type PartnerRole = "pro" | "seller" | "both";
 export type PartnerStatus = "pending" | "approved" | "rejected";
 export type LeadType = "job" | "supply";
 export type LeadStatus = "new" | "contacted" | "won" | "paid" | "lost";

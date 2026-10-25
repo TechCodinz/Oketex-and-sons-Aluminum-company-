@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { quoteFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 // POST (public) → save a calculator quote. GET → admin list only.
 export default wrap(async (req: any, res: any) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
@@ -17,7 +17,8 @@ export default wrap(async (req: any, res: any) => {
     return sendJson(res, 201, { quote: quoteFromRow(rows[0]) });
   }
   if (req.method === "GET") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "sales"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const rows = await dbQuery(`SELECT * FROM quotes ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { quotes: rows.map(quoteFromRow) });
   }

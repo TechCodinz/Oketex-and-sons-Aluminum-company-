@@ -12,8 +12,12 @@ export const SCHEMA_STATEMENTS: string[] = [
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'customer',
     partner_code TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
+  // Staff System (2026-10-25): pre-existing databases gain the active flag
+  // (deactivated staff lose access at login). No-op on fresh databases.
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
   `CREATE TABLE IF NOT EXISTS partners (
     code TEXT PRIMARY KEY,
     role TEXT NOT NULL DEFAULT 'pro',
@@ -193,5 +197,46 @@ export const SCHEMA_STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS snap_requests_partner_idx ON snap_requests (assigned_partner_code)`,
   `CREATE INDEX IF NOT EXISTS snap_requests_created_idx ON snap_requests (created_at DESC)`,
+  // ---- Staff System (2026-10-25): activity log (src/lib/activity.ts) ----
+  `CREATE TABLE IF NOT EXISTS activity_log (
+    id TEXT PRIMARY KEY,
+    actor_name TEXT NOT NULL DEFAULT '',
+    actor_role TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL DEFAULT '',
+    ref_code TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS activity_created_idx ON activity_log (created_at DESC)`,
+  // ---- Factory wing (2026-10-25): production pipeline (src/lib/production.ts) ----
+  // Full job card in `data` jsonb (cutting list, QC record, checklist);
+  // columns carry the queryable fields.
+  `CREATE TABLE IF NOT EXISTS production_jobs (
+    code TEXT PRIMARY KEY,
+    order_code TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Queued',
+    operator_name TEXT NOT NULL DEFAULT '',
+    customer_name TEXT NOT NULL DEFAULT '',
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS production_order_idx ON production_jobs (order_code)`,
+  `CREATE INDEX IF NOT EXISTS production_status_idx ON production_jobs (status)`,
+  // ---- Stage S3 (2026-10-25): partner two-way flow — supply requests ----
+  // Full request (incl. all partners' quotes) in `data` jsonb; partner reads
+  // are stripped to their OWN quote server-side (records.supplyFromRow).
+  `CREATE TABLE IF NOT EXISTS supply_requests (
+    code TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'buy',
+    item TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Open',
+    chosen_partner_code TEXT,
+    chosen_total_ngn INTEGER,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS supply_status_idx ON supply_requests (status)`,
 ];
 export const SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";

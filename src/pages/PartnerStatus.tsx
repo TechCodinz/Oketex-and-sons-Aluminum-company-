@@ -4,9 +4,10 @@ import { Link } from "react-router";
 import { BadgeCheck, CreditCard, Inbox, MessageCircle, Package, Search, Star } from "lucide-react";
 import { PageHead, StatusBadge } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { findPartnerAsync, getLeadsForPartnerAsync, getOffersAsync, partnerAvailable, setPartnerAvailabilityAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
+import { findPartnerOwnerAsync, getLeadsForPartnerAsync, getOffersAsync, partnerAvailable, setPartnerAvailabilityAsync, type Lead, type Offer, type Partner } from "@/lib/partnerStorage";
 import { getJobsAsync, getPartnerBidsAsync, placeBidAsync, budgetLabel, type Job, type Bid } from "@/lib/jobs";
 import { getSnapRequestsForPartnerAsync, snapProgressAsync, snapPartnerStatusAsync, compressImageFile, SNAP_INTENT_LABEL, type SnapRequest } from "@/lib/snapRequests";
+import { getSupplyForPartnerAsync, quoteSupplyAsync, supplyOutcome, type SupplyRequest } from "@/lib/supply";
 import { MapCard } from "@/components/MapCard";
 import { notify } from "@/lib/notify";
 import { paymentsApi } from "@/lib/api";
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 export default function PartnerStatus() {
   const TERMS = getPartnerTerms();
   const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
   const [searched, setSearched] = useState("");
   const [partner, setPartner] = useState<Partner | undefined>(undefined);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -28,6 +30,20 @@ export default function PartnerStatus() {
   const [snapJobs, setSnapJobs] = useState<SnapRequest[]>([]);
   const [snapForms, setSnapForms] = useState<Record<string, { text: string; photo: string | null }>>({});
   const loadSnapJobs = async (p: Partner) => setSnapJobs(await getSnapRequestsForPartnerAsync(p.code));
+  const [supplyReqs, setSupplyReqs] = useState<SupplyRequest[]>([]);
+  const [supplyForms, setSupplyForms] = useState<Record<string, { price: string; days: string; note: string }>>({});
+  const loadSupply = async (p: Partner) => setSupplyReqs(p.role === "pro" ? [] : await getSupplyForPartnerAsync(p, p.phone));
+  const submitSupplyQuote = async (r: SupplyRequest) => {
+    if (!partner) return;
+    const f = supplyForms[r.code] ?? { price: "", days: "", note: "" };
+    const unit = parseFloat(f.price) || 0;
+    if (unit <= 0) { toast.error("Enter your unit price"); return; }
+    const res = await quoteSupplyAsync(r.code, partner, partner.phone, { unitPriceNgn: unit, leadDays: parseInt(f.days) || 0, note: f.note.trim() });
+    if (res.error || !res.request) { toast.error(res.error || "Quote failed"); return; }
+    void notify({ templateKey: "supply_quoted", audience: "admin", refCode: r.code, vars: { code: r.code, partner: partner.businessName, amount: formatNGN(unit * r.qty) } });
+    await loadSupply(partner);
+    toast.success(`Quote sent — ${formatNGN(unit)} × ${r.qty} ${r.unit} = ${formatNGN(unit * r.qty)}. Oketex admin compares quotes privately.`);
+  };
   const toggleAvailability = async () => {
     if (!partner) return;
     const next = !partnerAvailable(partner);
@@ -51,21 +67,25 @@ export default function PartnerStatus() {
     await loadSnapJobs(partner);
     toast.success(action === "start" ? "Job started" : "Job marked complete — thank you");
   };
-  // API-first lookup (server record when the backend is live, local otherwise).
+  // API-first OWNER lookup (server record when the backend is live, local
+  // otherwise) — the full record is released only against the phone number
+  // the partner registered with (Admin-Routing rule).
   const lookup = async (c: string) => {
     setSearched(c);
-    const p = c.trim() ? await findPartnerAsync(c) : undefined;
+    const p = c.trim() ? await findPartnerOwnerAsync(c, phone) : undefined;
+    if (c.trim() && !p) toast.error("No match — check your partner code and use the phone number you registered with.");
     setPartner(p);
-    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); return; }
+    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); return; }
     setLeads(await getLeadsForPartnerAsync(p.code));
     if (p.status === "approved") {
       const all = await getOffersAsync();
-      const want = p.role === "pro" ? "pros" : "sellers";
-      setOffers(all.filter(o => o.audience === "all" || o.audience === want));
+      const want = p.role === "pro" ? "pros" : p.role === "seller" ? "sellers" : "both";
+      setOffers(all.filter(o => o.audience === "all" || o.audience === want || want === "both"));
       setOpenJobs(await getJobsAsync());
       setMyBids(await getPartnerBidsAsync(p.code));
       await loadSnapJobs(p);
-    } else { setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); }
+      await loadSupply(p);
+    } else { setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); }
   };
   const submitBid = async (job: Job) => {
     if (!partner) return;
@@ -90,14 +110,18 @@ export default function PartnerStatus() {
     businessWaLink(`Hello Oketex, I want to activate an upgrade on the Partner Network.\n\nBusiness: ${partner?.businessName}\nPartner code: ${partner?.code}\nUpgrade: ${kind} (${fee})\n\nPlease confirm payment details.`);
 
   return (<div>
-    <PageHead kicker="Partner Network" title="Partner Status & Dashboard" lead="Enter your partner code (PRT-…) to see your approval status, the leads Oketex has sent you, supply offers, and upgrade options." />
+    <PageHead kicker="Partner Network" title="Partner Status & Dashboard" lead="Enter your partner code (PRT-…) and the phone number you registered with to see your approval status, the leads Oketex has sent you, supply offers, and upgrade options. Your contact details are never published — customers reach you only through Oketex admin." />
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
-      <div className="flex gap-3 max-w-xl">
-        <input value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && void lookup(code)} placeholder="PRT-2026-XXXXX" className="field-tech font-tech uppercase" aria-label="Partner code" />
+      <div className="border hairline bg-card px-5 py-4 mb-6 max-w-3xl">
+        <p className="font-tech text-[11px] text-muted-foreground"><span className="text-primary uppercase tracking-widest">Network rule — </span>All customers and jobs that come through Oketex are served through Oketex admin. Contact details are exchanged by admin when a job is assigned. Taking platform customers off-platform to avoid commission may lead to removal from the network.</p>
+      </div>
+      <div className="flex gap-3 max-w-xl flex-wrap">
+        <input value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && void lookup(code)} placeholder="PRT-2026-XXXXX" className="field-tech font-tech uppercase flex-1 min-w-44" aria-label="Partner code" />
+        <input value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === "Enter" && void lookup(code)} placeholder="PHONE YOU REGISTERED WITH" className="field-tech font-tech flex-1 min-w-44" aria-label="Phone number you registered with" />
         <Button className="rounded-none font-display uppercase shrink-0 h-12" onClick={() => void lookup(code)}><Search className="h-4 w-4 mr-2" /> Look up</Button>
       </div>
 
-      {searched && !partner && <div className="border hairline py-14 text-center mt-8"><p className="font-tech text-sm uppercase tracking-widest text-muted-foreground">No partner found with that code — check it and try again, or <Link to="/join" className="text-primary">register here</Link>.</p></div>}
+      {searched && !partner && <div className="border hairline py-14 text-center mt-8"><p className="font-tech text-sm uppercase tracking-widest text-muted-foreground">No partner matched that code + phone — use the exact phone number from your application, or <Link to="/join" className="text-primary">register here</Link>.</p></div>}
 
       {partner && (
         <div className="mt-8 space-y-8">
@@ -105,13 +129,20 @@ export default function PartnerStatus() {
             <div>
               <p className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground">Partner · {partner.code}</p>
               <h2 className="font-display font-bold uppercase text-3xl mt-1 flex items-center gap-2">{partner.businessName}{partner.verified && <BadgeCheck className="h-6 w-6 text-primary" />}{partner.featured && <Star className="h-5 w-5 text-primary" />}</h2>
-              <p className="font-tech text-xs text-muted-foreground mt-1">{partner.role === "pro" ? `Pro — ${partner.trades.join(", ")}` : `Seller — ${partner.categories.join(", ")}`} · {partner.location}</p>
+              <p className="font-tech text-xs text-muted-foreground mt-1">{partner.role === "pro" ? `Pro — ${partner.trades.join(", ")}` : partner.role === "seller" ? `Seller — ${partner.categories.join(", ")}` : `Pro + Seller — ${[...partner.trades, ...partner.categories].join(", ")}`} · {partner.location}</p>
             </div>
             <div className="flex flex-col items-end gap-2">
               <StatusBadge status={partner.status === "approved" ? "delivered" : partner.status === "pending" ? "pending" : "cancelled"} />
               {partner.status === "approved" && (<button onClick={() => void toggleAvailability()} className={`font-tech text-[11px] border px-3 py-2 cursor-pointer ${partnerAvailable(partner) ? "border-emerald-500/60 text-emerald-400" : "hairline text-muted-foreground"}`}>Available for assignments: <b>{partnerAvailable(partner) ? "ON" : "OFF"}</b> — tap to change</button>)}
             </div>
           </section>
+
+          {partner.status === "approved" && (
+            <section className="border hairline bg-card p-5">
+              <p className="label-tech mb-2">How work reaches you — both directions, through the office</p>
+              <p className="font-tech text-xs text-muted-foreground leading-relaxed">{partner.role !== "seller" && <>Jobs are ASSIGNED to you by Oketex admin — tracked leads below, job-board awards and Snap &amp; Send dispatches. </>}{partner.role !== "pro" && <>Customer orders are routed to you by admin as leads — and when the Oketex factory itself needs materials or equipment, a Supply Request lands in your inbox below for a private quote. </>}Nothing runs direct: admin coordinates every deal, so both sides stay protected.</p>
+            </section>
+          )}
 
           {partner.status === "pending" && (
             <section className="border border-yellow-500/40 bg-yellow-500/5 p-6">
@@ -202,6 +233,30 @@ export default function PartnerStatus() {
                     <a href={businessWaLink(`Hello Oketex, I want to take this Partner Network offer:\n\n${o.productName} — ${formatNGN(o.priceNgn)} ${o.unit}\nPartner: ${partner.businessName} (${partner.code})`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-3 font-tech text-xs uppercase tracking-widest text-primary hover:underline"><MessageCircle className="h-3.5 w-3.5" /> Take offer on WhatsApp</a>
                   </div>))}</div>}
             </section>
+
+            {partner.role !== "pro" && (
+            <section>
+              <h3 className="font-display font-bold uppercase text-2xl mb-1">Supply Requests — Oketex is buying ({supplyReqs.length})</h3>
+              <p className="font-tech text-[11px] text-muted-foreground mb-4">The factory raises these when it needs materials or equipment. Quote your unit price — the total is computed from the quantity. Your quote is visible ONLY to Oketex admin; you never see other partners' prices, and they never see yours. No commission on procurement.</p>
+              {!supplyReqs.length ? <p className="font-tech text-sm text-muted-foreground border hairline p-5">No open supply requests for you right now — targeted requests and broadcasts to approved sellers appear here.</p>
+              : <div className="space-y-4">{supplyReqs.map(r => { const outcome = supplyOutcome(r, partner.code); const mine = r.quotes.find(q => q.partnerCode === partner.code); const f = supplyForms[r.code] ?? { price: "", days: "", note: "" }; return (
+                <div key={r.code} className="border hairline bg-card p-5">
+                  <div className="flex flex-wrap gap-3 justify-between items-start">
+                    <div><p className="font-tech font-semibold">{r.code} — {r.type === "hire" ? "HIRE" : "BUY"} · {r.item}</p>
+                    <p className="font-tech text-[11px] text-muted-foreground mt-1">{r.qty} {r.unit}{r.spec ? ` · ${r.spec}` : ""}{r.neededBy ? ` · needed by ${r.neededBy}` : ""}{r.note ? ` · ${r.note}` : ""}</p></div>
+                    <span className={`font-tech text-[10px] uppercase tracking-widest border px-2 py-0.5 ${outcome === "Won" ? "border-emerald-500/60 text-emerald-400" : outcome === "Lost" ? "hairline text-muted-foreground" : "hairline"}`}>{outcome}</span>
+                  </div>
+                  {mine ? <p className="font-tech text-xs mt-3">Your quote: <b>{formatNGN(mine.unitPriceNgn)}</b> per {r.unit} × {r.qty} = <b>{formatNGN(mine.totalNgn)}</b>{mine.leadDays ? ` · ${mine.leadDays} day(s) lead` : ""}{mine.note ? ` · ${mine.note}` : ""} — you can re-quote below while the request is open.</p>
+                  : <p className="font-tech text-xs text-muted-foreground mt-3">You have not quoted yet.</p>}
+                  {["Open", "Quoted"].includes(r.status) && (<div className="flex flex-wrap gap-3 items-end mt-4">
+                    <div className="w-44"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Unit price ₦</label><input type="number" min={0} value={f.price} onChange={e => setSupplyForms({ ...supplyForms, [r.code]: { ...f, price: e.target.value } })} className="field-tech font-tech" /></div>
+                    <div className="w-32"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Lead days</label><input type="number" min={0} value={f.days} onChange={e => setSupplyForms({ ...supplyForms, [r.code]: { ...f, days: e.target.value } })} className="field-tech font-tech" /></div>
+                    <div className="flex-1 min-w-52"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Note</label><input value={f.note} onChange={e => setSupplyForms({ ...supplyForms, [r.code]: { ...f, note: e.target.value } })} className="field-tech" placeholder="Delivery terms, brand, warranty…" /></div>
+                    <Button className="rounded-none font-display uppercase h-11" onClick={() => void submitSupplyQuote(r)}>{mine ? "Update quote" : "Send quote"}</Button>
+                  </div>)}
+                </div>); })}</div>}
+            </section>
+            )}
 
             <section>
               <h3 className="font-display font-bold uppercase text-2xl mb-4">Grow — upgrades (current launch terms)</h3>

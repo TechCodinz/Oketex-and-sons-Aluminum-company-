@@ -1,12 +1,14 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../../http.js";
 import { dbQuery, isDbConfigured } from "../../db.js";
 import { partnerFromRow } from "../../records.js";
-import { isAdmin } from "../../auth.js";
-// Admin-only partner management: GET all (incl. pending) + PATCH one
-// {code, status?, verified?, featured?}.
+import { requireRole, roleErrorBody } from "../../auth.js";
+// Admin partner management: GET all (incl. pending) + PATCH one
+// {code, status?, verified?, featured?}. Staff System role gate: owner +
+// operations (the dispatch coordinator runs partner approvals day to day).
 export default wrap(async (req: any, res: any) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
-  if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+  const gate = await requireRole(req, ["admin", "operations"]);
+  if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
   if (req.method === "GET") {
     const rows = await dbQuery(`SELECT * FROM partners ORDER BY created_at DESC`);
     return sendJson(res, 200, { partners: rows.map(partnerFromRow) });

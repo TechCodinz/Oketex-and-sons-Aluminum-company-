@@ -78,7 +78,7 @@ check(`statements applied == SCHEMA_STATEMENTS (${api.SCHEMA_STATEMENTS.length})
 // limitation), so instead of a second setup call we assert the outcome a
 // re-run must preserve: all 9 tables exist and stay writable.
 const tbl = await api.dbQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-check("all 14 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
+check("all 17 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests","activity_log","production_jobs","supply_requests"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
 
 // ---------- 2. Health ----------
 console.log("\n[2] GET /api/health");
@@ -131,6 +131,21 @@ r = await call(api.adminPartners, { method: "PATCH", headers: { cookie: adminCoo
 check("admin PATCH approves", r.status === 200 && r.json?.partner?.status === "approved", `got ${r.status}: ${r.raw.slice(0, 140)}`);
 r = await call(api.partners, { method: "GET" });
 check("public list now includes approved partner", (r.json?.partners || []).some(p => p.code === "PRT-2026-SMOKE"));
+
+// ---------- 5b. Partner contact masking (Admin-Routing) ----------
+console.log("\n[5b] Partners — public responses strip phone/email; admin + owner phone-proof retain");
+r = await call(api.partners, { method: "GET" });
+const pubPartner = (r.json?.partners || []).find(p => p.code === "PRT-2026-SMOKE");
+check("public list strips partner phone + email", !!pubPartner && pubPartner.phone === "" && !pubPartner.email, JSON.stringify(pubPartner).slice(0, 200));
+r = await call(api.partnerByCode, { method: "GET", query: { code: "PRT-2026-SMOKE" } });
+check("public detail (no proof) strips phone + email", r.json?.partner?.phone === "" && !r.json?.partner?.email, r.raw.slice(0, 160));
+r = await call(api.partnerByCode, { method: "GET", query: { code: "PRT-2026-SMOKE", phone: "08039998888" } });
+check("detail with WRONG phone still strips contact", r.json?.partner?.phone === "", r.raw.slice(0, 160));
+r = await call(api.partnerByCode, { method: "GET", query: { code: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("detail with owner phone-proof retains full contact", r.json?.partner?.phone === "08031112222" && r.json?.partner?.email === "smoke@partner.test", r.raw.slice(0, 160));
+r = await call(api.adminPartners, { method: "GET", headers: { cookie: adminCookie } });
+const admPartner = (r.json?.partners || []).find(p => p.code === "PRT-2026-SMOKE");
+check("admin list retains partner phone + email", admPartner?.phone === "08031112222" && admPartner?.email === "smoke@partner.test", JSON.stringify(admPartner).slice(0, 200));
 
 // ---------- 6. Leads + server-side commission snapshot ----------
 console.log("\n[6] Leads — commission snapshot from server-effective terms");
@@ -302,6 +317,99 @@ r = await call(api.partners, { method: "PATCH", body: { code: "PRT-2026-SMOKE", 
 check("availability toggle with wrong phone rejected (403)", r.status === 403, `got ${r.status}`);
 r = await call(api.partners, { method: "PATCH", body: { code: "PRT-2026-SMOKE", phone: partnerBody.phone, available: false } });
 check("partner sets own availability off (data jsonb merge)", r.status === 200 && r.json?.partner?.available === false, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+
+
+// ---------- 14. Staff System: RBAC + activity log ----------
+console.log("\n[14] Staff — owner creates staff, role gates bite, deactivation locks login");
+r = await call(api.staff, { method: "POST", headers: { cookie: adminCookie }, body: { name: "Sally Sales", email: "sales@oketex.test", phone: "08030001111", role: "sales", password: "sales-pass-1" } });
+check("owner creates a sales staff account (201)", r.status === 201 && r.json?.staff?.role === "sales", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+const salesId = r.json?.staff?.id;
+r = await call(api.staff, { method: "POST", headers: { cookie: custCookie }, body: { name: "Mallory", email: "mallory@oketex.test", phone: "08030009999", role: "admin", password: "mallory-pass-1" } });
+check("staff create with a CUSTOMER session rejected (401)", r.status === 401, `got ${r.status}`);
+r = await call(api.login, { method: "POST", body: { email: "sales@oketex.test", password: "sales-pass-1" } });
+check("sales staff logs in with role sales", r.status === 200 && r.json?.user?.role === "sales", `got ${r.status}: ${r.raw.slice(0, 140)}`);
+const salesCookie = cookieOf(r);
+r = await call(api.settings, { method: "PUT", headers: { cookie: salesCookie }, body: { partnerTerms: { referralCommissionPct: 3 } } });
+check("sales token gets 403 on settings PUT (owner-only)", r.status === 403, `got ${r.status}`);
+r = await call(api.staff, { method: "POST", headers: { cookie: salesCookie }, body: { name: "Second", email: "second@oketex.test", phone: "08030002222", role: "support", password: "second-pass-1" } });
+check("staff CRUD rejects non-owner staff (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.staff, { method: "POST", headers: { cookie: adminCookie }, body: { name: "Olga Operations", email: "ops@oketex.test", phone: "08030003333", role: "operations", password: "ops-pass-123" } });
+check("owner creates an operations account (201)", r.status === 201, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+r = await call(api.login, { method: "POST", body: { email: "ops@oketex.test", password: "ops-pass-123" } });
+const opsCookie = cookieOf(r);
+await call(api.partners, { method: "POST", body: { ...partnerBody, code: "PRT-2026-OPS", businessName: "Ops Approved Ltd", email: "opsapproved@partner.test", phone: "08036667777" } });
+r = await call(api.adminPartners, { method: "PATCH", headers: { cookie: opsCookie }, body: { code: "PRT-2026-OPS", status: "approved" } });
+check("operations CAN patch partners (200)", r.status === 200 && r.json?.partner?.status === "approved", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.staff, { method: "PATCH", headers: { cookie: adminCookie }, body: { id: salesId, active: false } });
+check("owner deactivates the sales account (200)", r.status === 200 && r.json?.staff?.active === false, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.login, { method: "POST", body: { email: "sales@oketex.test", password: "sales-pass-1" } });
+check("deactivated staff login rejected (403)", r.status === 403, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+r = await call(api.activity, { method: "POST", headers: { cookie: opsCookie }, body: { action: "smoke_ping", refCode: "SMOKE", detail: "activity endpoint accepts staff posts" } });
+check("staff can post an activity entry (201)", r.status === 201, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+r = await call(api.activity, { method: "GET", headers: { cookie: adminCookie } });
+check("activity log (owner read) contains staff_created + the ping", r.status === 200 && (r.json?.entries || []).some(e => e.action === "staff_created") && (r.json?.entries || []).some(e => e.action === "smoke_ping"), `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.activity, { method: "GET", headers: { cookie: opsCookie } });
+check("activity read is owner-only for staff too (403)", r.status === 403, `got ${r.status}`);
+
+// ---------- 15. Factory wing + Supply (S3) ----------
+console.log("\n[15] Production pipeline RBAC + state machine; supply two-way flow");
+const mkStaff = async (name, email, role) => {
+  const c = await call(api.staff, { method: "POST", headers: { cookie: adminCookie }, body: { name, email, phone: "08030004444", role, password: "factory-pass-1" } });
+  const l = await call(api.login, { method: "POST", body: { email, password: "factory-pass-1" } });
+  return cookieOf(l);
+};
+const operatorCookie = await mkStaff("Ola Operator", "operator@oketex.test", "operator");
+const qcCookie = await mkStaff("Queen QC", "qc@oketex.test", "qc");
+const warehouseCookie = await mkStaff("Wale Warehouse", "warehouse@oketex.test", "warehouse");
+const dispatchCookie = await mkStaff("Dan Dispatch", "dispatch@oketex.test", "dispatch");
+r = await call(api.production, { method: "POST", headers: { cookie: adminCookie }, body: { orderCode: "ORD-SMOKE-1", customerName: "Factory Customer", address: "12 Test Close, Ibafo", product: { name: "Longspan 0.45", gauge: "0.45mm", colour: "Forest Green" }, cuttingList: [{ lengthM: 5.08, qty: 24 }] } });
+check("production job created — cutting total 24 × 5.08 = 121.92m server-side", r.status === 201 && r.json?.job?.totalMetres === 121.92 && r.json?.job?.status === "Queued", `got ${r.status}: ${r.raw.slice(0, 200)}`);
+const prdCode = r.json?.job?.code;
+r = await call(api.production, { method: "POST", headers: { cookie: adminCookie }, body: { orderCode: "ORD-SMOKE-1", customerName: "Factory Customer", cuttingList: [] } });
+check("re-creating for the same order dedupes to the open job", r.status === 200 && r.json?.existing === true && r.json?.job?.code === prdCode, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: prdCode, action: "assign", operatorName: "Ola Operator" } });
+check("manager assigns the operator", r.status === 200 && r.json?.job?.operatorName === "Ola Operator", `got ${r.status}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: operatorCookie }, body: { code: prdCode, action: "start" } });
+check("assigned operator starts → In Production", r.status === 200 && r.json?.job?.status === "In Production", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: operatorCookie }, body: { code: prdCode, action: "finish", metresProduced: 121.92, scrapNote: "2m offcuts" } });
+check("operator finishes → Produced with metres + scrap note", r.status === 200 && r.json?.job?.status === "Produced" && r.json?.job?.metresProduced === 121.92, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: operatorCookie }, body: { code: prdCode, action: "qc", result: "pass" } });
+check("operator CANNOT QC-pass their own job (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.settings, { method: "PUT", headers: { cookie: qcCookie }, body: { partnerTerms: { referralCommissionPct: 3 } } });
+check("qc staff CANNOT edit settings (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: warehouseCookie }, body: { code: prdCode, action: "bundle" } });
+check("bundle BEFORE QC pass rejected — QC cannot be skipped (400)", r.status === 400, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: qcCookie }, body: { code: prdCode, action: "qc", result: "pass", notes: "Gauge + colour verified" } });
+check("qc passes → QC Passed", r.status === 200 && r.json?.job?.status === "QC Passed" && r.json?.job?.qc?.result === "pass", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: warehouseCookie }, body: { code: prdCode, action: "bundle" } });
+check("warehouse bundles → Bundled", r.status === 200 && r.json?.job?.status === "Bundled", `got ${r.status}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: dispatchCookie }, body: { code: prdCode, action: "dispatch" } });
+check("dispatch sends → Dispatched", r.status === 200 && r.json?.job?.status === "Dispatched", `got ${r.status}`);
+r = await call(api.production, { method: "PATCH", headers: { cookie: dispatchCookie }, body: { code: prdCode, action: "deliver" } });
+check("dispatch closes the loop → Delivered", r.status === 200 && r.json?.job?.status === "Delivered", `got ${r.status}`);
+// Supply: two sellers quote a broadcast; a pro-only partner sees nothing.
+const sellerBody = { ...partnerBody, role: "seller", trades: [], categories: ["Rainwater Goods"], products: [] };
+await call(api.partners, { method: "POST", body: { ...sellerBody, code: "PRT-2026-SELLA", businessName: "Seller A Ltd", email: "sella@partner.test", phone: "08031113333" } });
+await call(api.partners, { method: "POST", body: { ...sellerBody, code: "PRT-2026-SELLB", businessName: "Seller B Ltd", email: "sellb@partner.test", phone: "08034445555" } });
+await call(api.adminPartners, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "PRT-2026-SELLA", status: "approved" } });
+await call(api.adminPartners, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "PRT-2026-SELLB", status: "approved" } });
+r = await call(api.supply, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SUP-2026-SMOKE", type: "buy", item: "Aluminium rain gutter & downpipe", qty: 40, unit: "pcs", targetPartnerCodes: [] } });
+check("admin raises a broadcast supply request (201, Open)", r.status === 201 && r.json?.request?.status === "Open", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.supply, { method: "GET", query: { partnerCode: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("pro-only partner does NOT see seller broadcasts", r.status === 200 && !(r.json?.requests || []).some(x => x.code === "SUP-2026-SMOKE"), `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.supply, { method: "GET", query: { partnerCode: "PRT-2026-SELLA", phone: "08031113333" } });
+check("approved seller sees the broadcast", r.status === 200 && (r.json?.requests || []).some(x => x.code === "SUP-2026-SMOKE"), `got ${r.status}`);
+r = await call(api.supply, { method: "PATCH", body: { code: "SUP-2026-SMOKE", action: "quote", partnerCode: "PRT-2026-SELLA", phone: "08031113333", unitPriceNgn: 12500, leadDays: 3, note: "Ex-stock" } });
+check("seller A quotes ₦12,500 × 40 — server total ₦500,000, status Quoted", r.status === 200 && r.json?.request?.status === "Quoted" && r.json?.request?.quotes?.[0]?.totalNgn === 500000, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.supply, { method: "PATCH", body: { code: "SUP-2026-SMOKE", action: "quote", partnerCode: "PRT-2026-SELLB", phone: "08034445555", unitPriceNgn: 13000, leadDays: 5, note: "" } });
+check("seller B quotes ₦13,000 × 40 = ₦520,000", r.status === 200 && (r.json?.request?.quotes || []).some(q => q.partnerCode === "PRT-2026-SELLB" && q.totalNgn === 520000), `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.supply, { method: "GET", query: { partnerCode: "PRT-2026-SELLA", phone: "08031113333" } });
+const aView = (r.json?.requests || []).find(x => x.code === "SUP-2026-SMOKE");
+check("partner read strips OTHER partners' quotes (A sees only A's)", !!aView && aView.quotes.length === 1 && aView.quotes[0].partnerCode === "PRT-2026-SELLA", r.raw.slice(0, 200));
+r = await call(api.supply, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "SUP-2026-SMOKE", action: "approve", partnerCode: "PRT-2026-SELLA" } });
+check("admin approves A — chosen total ₦500,000 recorded", r.status === 200 && r.json?.request?.status === "Approved" && r.json?.request?.chosenPartnerCode === "PRT-2026-SELLA" && r.json?.request?.chosenTotalNgn === 500000, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.supply, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "SUP-2026-SMOKE", action: "received" } });
+check("admin marks Received", r.status === 200 && r.json?.request?.status === "Received", `got ${r.status}`);
 
 console.log(`\nSMOKE RESULT: ${pass} passed, ${fail} failed${fail ? " — failures: " + failures.join("; ") : ""}`);
 process.exit(fail ? 1 : 0);

@@ -15,6 +15,12 @@ export { summarizeReviews } from "@/lib/reviews";
 export { assessmentTotal, snapCommission } from "@/lib/snapRequests";
 export { renderTemplate } from "@/lib/notify";
 export { translate } from "@/lib/i18n";
+export { toPublicPartner } from "@/lib/partnerStorage";
+export { needsAttention } from "@/lib/needsAttention";
+export { buildBriefing, draftAssessment, recommendPartners, haversineKm } from "@/lib/opsAgent";
+export { cuttingListTotal, canTransition } from "@/lib/production";
+export { lowStockFlags } from "@/lib/stock";
+export { supplyQuoteTotal, capabilityMatch, supplyCandidates } from "@/lib/supply";
 `;
 writeFileSync("/tmp/verify-entry.ts", entry);
 await build({ entryPoints: ["/tmp/verify-entry.ts"], bundle: true, platform: "node", format: "esm", outfile: "/tmp/verify-bundle.mjs", alias: { "@": process.cwd() + "/src" }, logLevel: "silent" });
@@ -142,6 +148,90 @@ eq("dispatch never applies on pickup", M.dispatchFor(3000, "pickup"), 0);
 eq("dispatch off when fee is 0", M.dispatchFor(0, "ogun-lagos"), 0);
 eq("grand total 100,000 + 45,000 + 3,000 = 148,000", M.orderGrandTotal(100000, 45000, 3000, "ogun-lagos"), 148000);
 eq("pickup grand total stays 100,000", M.orderGrandTotal(100000, 0, 3000, "pickup"), 100000);
+
+console.log("— Admin-Routing: public partner mapping + needs-attention queue —");
+// (a) The public partner shape strips phone + email but keeps everything
+// a customer legitimately sees (name, trades, ratings inputs, products).
+const fullPartner = { code: "PRT-2026-TEST", role: "seller", businessName: "Test Depot", contactName: "T. Est", phone: "+234 803 555 0999", email: "test@depot.ng", location: "Ibafo", areas: "Lagos", trades: [], categories: ["Roofing Materials"], bio: "x", products: [{ id: "1", name: "Sheet", priceNgn: 100, unit: "per m" }], status: "approved", verified: true, featured: false, createdAt: new Date().toISOString() };
+const pub = M.toPublicPartner(fullPartner);
+ok("public mapping strips phone", pub.phone === "");
+ok("public mapping strips email", pub.email === undefined);
+ok("public mapping keeps business name + products", pub.businessName === "Test Depot" && pub.products.length === 1);
+ok("public mapping does not mutate the source record", fullPartner.phone === "+234 803 555 0999");
+// (b) Needs-attention aggregator over a seeded pending set.
+const queue = M.needsAttention({
+  orders: [{ status: "pending" }, { status: "delivered" }, { status: "pending" }],
+  quotes: [{ status: "new" }, { status: "contacted" }],
+  bookings: [{ status: "pending" }, { status: "confirmed" }],
+  verifyRequests: [{ status: "Requested" }, { status: "Done" }, { status: "Requested" }],
+  partners: [{ status: "pending" }, { status: "approved" }],
+  jobs: [{ status: "Open", bids: [{ id: 1 }] }, { status: "Open", bids: [] }, { status: "Awarded", bids: [{ id: 2 }] }],
+  snapRequests: [{ status: "Received" }, { status: "Priced" }, { status: "Completed" }, { status: "Under Review" }],
+  leads: [{ status: "new" }, { status: "won" }, { status: "new" }],
+});
+const countOf = k => queue.find(r => r.key === k)?.count ?? 0;
+eq("queue: pending orders", countOf("orders"), 2);
+eq("queue: new quotes", countOf("quotes"), 1);
+eq("queue: pending bookings", countOf("bookings"), 1);
+eq("queue: verification requests", countOf("verify"), 2);
+eq("queue: partner applications", countOf("partners"), 1);
+eq("queue: open jobs WITH bids only", countOf("jobs"), 1);
+eq("queue: snap Received/Under Review/Priced", countOf("snap"), 3);
+eq("queue: new leads", countOf("leads"), 2);
+eq("queue: every category present", queue.length, 8);
+eq("queue: empty input -> all clear (0 rows)", M.needsAttention({}).length, 0);
+ok("queue rows carry target tabs", queue.every(r => typeof r.tab === "string" && r.tab.length > 0));
+
+
+console.log("— Staff System: Ops Agent + Factory + Supply fixtures —");
+// Production math + state machine
+eq("cutting list total 24 × 5.08m", M.cuttingListTotal([{ lengthM: 5.08, qty: 24 }]), 121.92);
+ok("state machine: Produced → bundle REJECTED (QC cannot be skipped)", M.canTransition("Produced", "bundle") === false);
+ok("state machine: Produced → qcPass allowed", M.canTransition("Produced", "qcPass") === true);
+ok("state machine: QC Passed → bundle allowed", M.canTransition("QC Passed", "bundle") === true);
+// Low-stock flags against the editable threshold
+const lowFlags = M.lowStockFlags({ items: [{ gauge: "0.45mm", colour: "Forest Green", kg: 300 }, { gauge: "0.55mm", colour: "Brick Red", kg: 800 }], thresholdKg: 500 });
+eq("low stock: only the 300kg coil flags (threshold 500)", lowFlags.length, 1);
+eq("low stock: flagged coil is the 0.45mm", lowFlags[0]?.gauge, "0.45mm");
+// Supply math + capability matching
+eq("supply quote total 40 × ₦12,500", M.supplyQuoteTotal(40, 12500), 500000);
+ok("capability match: 'aluminium gutter' hits 'Rain gutters & downpipes'", M.capabilityMatch(["Aluminium coils 0.45mm", "Rain gutters & downpipes"], "Aluminium rain gutter & downpipe") === true);
+ok("capability match: unrelated capability does not match", M.capabilityMatch(["Generator hire (20kVA)"], "Aluminium rain gutter") === false);
+// Ops Agent drafter: catalogue prices only
+const catalogue = [{ name: "Aluminium Rain Gutter & Downpipe", priceNgn: 6500 }, { name: "0.45mm Longspan Roofing Sheet", priceNgn: 4800 }];
+const draft = M.draftAssessment({ description: "leaking gutter joint at the corner of the house", intent: "repair", address: "Magboro, Ogun State" }, catalogue, { deliveryZones: { pickup: 0, "ogun-lagos": 45000 } });
+const gutterLine = draft.items.find(i => i.name === "Aluminium Rain Gutter & Downpipe");
+ok("drafter maps 'leaking gutter joint' → the catalogue gutter item", !!gutterLine && gutterLine.matched === true);
+eq("drafter uses the CATALOGUE price ₦6,500 (never invented)", gutterLine?.unitPrice, 6500);
+eq("drafter transport = ogun-lagos zone fee from the address", draft.transportNgn, 45000);
+ok("drafter flags workmanship for a human", draft.flags.some(f => /workmanship/i.test(f)));
+// Ops Agent recommender: trade hard filter + rating/load ordering
+const recPartners = [
+  { code: "PRT-A", businessName: "Alpha Roofing", status: "approved", role: "pro", trades: ["Roofing"], categories: [], products: [] },
+  { code: "PRT-B", businessName: "Beta Roofing", status: "approved", role: "pro", trades: ["Roofing"], categories: [], products: [] },
+  { code: "PRT-C", businessName: "Gamma Plumbing", status: "approved", role: "pro", trades: ["Plumbing"], categories: [], products: [] },
+];
+const recReviews = [
+  { id: "r1", partnerCode: "PRT-A", rating: 5, status: "Published" }, { id: "r2", partnerCode: "PRT-A", rating: 5, status: "Published" },
+  { id: "r3", partnerCode: "PRT-B", rating: 4, status: "Published" },
+];
+const recSnaps = [
+  { code: "SR-1", assignedPartnerCode: "PRT-B", status: "Assigned" }, { code: "SR-2", assignedPartnerCode: "PRT-B", status: "In Progress" },
+];
+const recs = M.recommendPartners({ trade: "Roofing", partners: recPartners, reviews: recReviews, snapRequests: recSnaps, siteGeo: null });
+eq("recommender: trade-mismatched partner excluded", recs.length, 2);
+eq("recommender: higher rating + lower load wins (#1 = Alpha)", recs[0]?.partner.code, "PRT-A");
+ok("recommender: reasons carry the rating", /★/.test(recs[0]?.reasons.join(" ") || ""));
+eq("haversine (6.68,3.45)→(6.45,3.40) ≈ 26.2 km", Math.round(M.haversineKm({ lat: 6.68, lng: 3.45 }, { lat: 6.45, lng: 3.4 }) * 10) / 10, 26.2);
+// Ops Agent briefing: stuck detection at > 24h
+const fixedNow = new Date("2026-10-25T12:00:00.000Z");
+const old25h = new Date(fixedNow.getTime() - 25 * 3600_000).toISOString();
+const briefing = M.buildBriefing({
+  orders: [], quotes: [], bookings: [], leads: [], jobs: [], verifyRequests: [], partners: [], reviews: [], invoices: [], productionJobs: [],
+  stock: { items: [], thresholdKg: 500 },
+  snapRequests: [{ code: "SR-OLD", status: "Received", customerName: "Stuck Customer", createdAt: old25h, updatedAt: old25h }],
+}, fixedNow);
+ok("briefing flags the 25h-old snap request as stuck", briefing.stuck.some(x => x.code === "SR-OLD" && x.ageHours >= 25));
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

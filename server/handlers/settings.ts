@@ -1,6 +1,6 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 import { getSiteSettings } from "../siteSettings.js";
 // GET → public effective server settings, or {live:false} when there is no
 // DB / nothing stored. PUT (admin) → replace the 'site' settings document.
@@ -13,7 +13,9 @@ export default wrap(async (req: any, res: any) => {
   }
   if (req.method === "PUT") {
     if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    // Settings hold the money numbers — OWNER only (Staff System role gate).
+    const gate = await requireRole(req, ["admin"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const b = await readJson(req);
     // Pass through every settings group the frontend manages — dropping a
     // group here would silently wipe it for every visitor on the next save

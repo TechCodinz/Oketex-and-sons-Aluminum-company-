@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { jobFromRow, bidFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { isAdmin, requireRole, roleErrorBody } from "../auth.js";
 // Jobs board (Phase 6). POST (public) → post a job.
 // GET (no query) → PUBLIC board: Open jobs only, customer phones stripped.
 // GET ?code= → one job (phone included only with a matching ?phone= or admin).
@@ -51,7 +51,9 @@ export default wrap(async (req: any, res: any) => {
     return sendJson(res, 200, { jobs: rows.map((r: any) => ({ ...jobFromRow(r, { publicSafe: true }), bidsCount: countMap.get(r.code) || 0 })) });
   }
   if (req.method === "PATCH") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    // Moderation: owner + operations (Staff System role gate).
+    const gate = await requireRole(req, ["admin", "operations"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const b = await readJson(req);
     const code = String(b.code || "").trim().toUpperCase();
     if (!code || !JOB_STATUSES.includes(b.status)) return sendJson(res, 400, { error: "Missing code or bad status" });

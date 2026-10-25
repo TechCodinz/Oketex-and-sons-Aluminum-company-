@@ -18,6 +18,12 @@ export default wrap(async (req: any, res: any) => {
   if (!row || !(await verifyPassword(password, row.password_hash))) {
     return sendJson(res, 401, { error: "Email or password is incorrect" });
   }
+  // Staff System: a deactivated account loses access immediately — the
+  // password may be right, but the login is refused until the owner
+  // reactivates the account.
+  if (row.active === false) {
+    return sendJson(res, 403, { error: "This account has been deactivated — please contact the owner." });
+  }
   const user = publicUser(row);
   const token = await signSession(user);
   res.setHeader("Set-Cookie", sessionCookieHeader(token));

@@ -1,9 +1,10 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { orderFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody, getSessionUser, isStaffRole } from "../auth.js";
 // POST (public) → place order (items snapshot as jsonb).
-// GET ?code= | ?phone= → lookups. GET (admin) → all. PATCH (admin) → {code, status?, paid?}.
+// GET ?code= | ?phone= → lookups. GET (staff) → all.
+// PATCH → {code, status?, paid?}: owner + sales (desk) + accounts (payments).
 export default wrap(async (req: any, res: any) => {
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
   if (req.method === "POST") {
@@ -30,12 +31,14 @@ export default wrap(async (req: any, res: any) => {
       const rows = await dbQuery(`SELECT * FROM orders WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE '%' || $1 ORDER BY created_at DESC`, [phone.slice(-10)]);
       return sendJson(res, 200, { orders: rows.map(orderFromRow) });
     }
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const staffUser = await getSessionUser(req);
+    if (!staffUser || !isStaffRole(staffUser.role)) return sendJson(res, 401, { error: "Admin session required" });
     const rows = await dbQuery(`SELECT * FROM orders ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { orders: rows.map(orderFromRow) });
   }
   if (req.method === "PATCH") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "sales", "accounts"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const b = await readJson(req);
     const code = String(b.code || "").trim().toUpperCase();
     if (!code) return sendJson(res, 400, { error: "Missing order code" });

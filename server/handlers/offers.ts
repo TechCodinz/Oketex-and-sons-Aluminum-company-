@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { offerFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 // Supply offers pushed by admin to the partner network.
 // GET (public) → all offers (frontend filters by audience). POST/DELETE admin.
 export default wrap(async (req: any, res: any) => {
@@ -10,7 +10,9 @@ export default wrap(async (req: any, res: any) => {
     const rows = await dbQuery(`SELECT * FROM offers ORDER BY created_at DESC LIMIT 200`);
     return sendJson(res, 200, { offers: rows.map(offerFromRow) });
   }
-  if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+  // Pushing supply offers to the network: owner + operations.
+  const gate = await requireRole(req, ["admin", "operations"]);
+  if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
   if (req.method === "POST") {
     const b = await readJson(req);
     if (String(b.productName || "").trim().length < 2) return sendJson(res, 400, { error: "Missing product name" });

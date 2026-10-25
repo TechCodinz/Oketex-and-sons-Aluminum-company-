@@ -21,29 +21,31 @@ export default function Join() {
   const [role, setRole] = useState<PartnerRole>("pro");
   const [form, setForm] = useState({ business: "", contact: "", phone: "", email: "", location: "", areas: "", years: "", cac: "", bio: "", password: "" });
   const [tags, setTags] = useState<string[]>([]);
+  const [supplyText, setSupplyText] = useState("");
   const [rows, setRows] = useState<ProdRow[]>([{ ...EMPTY_ROW }]);
   const [agree, setAgree] = useState(false);
   const [created, setCreated] = useState<Partner | null>(null);
 
   const toggleTag = (t: string) => setTags(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
-  const tagOptions = role === "pro" ? [...PRO_TRADES] : [...SELLER_CATEGORIES];
+  const tagOptions = role === "pro" ? [...PRO_TRADES] : role === "seller" ? [...SELLER_CATEGORIES] : [...PRO_TRADES, ...SELLER_CATEGORIES];
 
   const submit = async () => {
     if (form.business.trim().length < 2) return toast.error("Enter your business name");
     if (form.contact.trim().length < 2) return toast.error("Enter a contact person name");
     if (form.phone.replace(/\D/g, "").length < 10) return toast.error("Enter a valid phone / WhatsApp number (at least 10 digits)");
     if (form.location.trim().length < 2) return toast.error("Enter your base location (city / state)");
-    if (!tags.length) return toast.error(role === "pro" ? "Pick at least one trade" : "Pick at least one category");
+    if (role === "both" ? !(tags.some(t => (PRO_TRADES as readonly string[]).includes(t)) && tags.some(t => (SELLER_CATEGORIES as readonly string[]).includes(t))) : !tags.length) return toast.error(role === "both" ? "Pick at least one trade AND one category" : role === "pro" ? "Pick at least one trade" : "Pick at least one category");
     if (!agree) return toast.error("Please agree to the partner launch terms");
     const partner: Partner = {
       code: partnerCode(), role,
       businessName: form.business.trim(), contactName: form.contact.trim(),
       phone: form.phone.trim(), email: form.email.trim() || undefined,
       location: form.location.trim(), areas: form.areas.trim() || form.location.trim(),
-      trades: role === "pro" ? tags : [], categories: role === "seller" ? tags : [],
+      trades: role === "pro" ? tags : role === "both" ? tags.filter(t => (PRO_TRADES as readonly string[]).includes(t)) : [], categories: role === "seller" ? tags : role === "both" ? tags.filter(t => (SELLER_CATEGORIES as readonly string[]).includes(t)) : [],
+      supplyCapabilities: role === "pro" ? [] : supplyText.split(/\n|,|;/).map(x => x.trim()).filter(Boolean),
       yearsExperience: form.years ? Math.max(0, parseInt(form.years, 10) || 0) : undefined,
       cacNumber: form.cac.trim() || undefined, bio: form.bio.trim(),
-      products: role === "seller" ? rows.filter(r => r.name.trim() && parseInt(r.price.replace(/\D/g, ""), 10) > 0).map(r => ({ id: Math.random().toString(36).slice(2, 9), name: r.name.trim(), priceNgn: parseInt(r.price.replace(/\D/g, ""), 10), unit: r.unit || "per piece" })) : [],
+      products: role !== "pro" ? rows.filter(r => r.name.trim() && parseInt(r.price.replace(/\D/g, ""), 10) > 0).map(r => ({ id: Math.random().toString(36).slice(2, 9), name: r.name.trim(), priceNgn: parseInt(r.price.replace(/\D/g, ""), 10), unit: r.unit || "per piece" })) : [],
       status: "pending", verified: false, featured: false,
       createdAt: new Date().toISOString(),
     };
@@ -60,7 +62,7 @@ export default function Join() {
   };
 
   if (created) {
-    const notify = businessWaLink(`Hello Oketex, I just registered on the Partner Network.\n\nBusiness: ${created.businessName}\nRole: ${created.role === "pro" ? "Pro" : "Seller"}\nPartner code: ${created.code}\nPhone: ${created.phone}\nLocation: ${created.location}\n\nPlease review my application.`);
+    const notify = businessWaLink(`Hello Oketex, I just registered on the Partner Network.\n\nBusiness: ${created.businessName}\nRole: ${created.role === "pro" ? "Pro" : created.role === "seller" ? "Seller" : "Pro + Seller (both)"}\nPartner code: ${created.code}\nPhone: ${created.phone}\nLocation: ${created.location}\n\nPlease review my application.`);
     return (<div>
       <PageHead kicker="Partner Network" title="Application received" lead="Your listing is pending review by the Oketex team. Keep your partner code safe — you need it to check your status and see your leads." />
       <div className="mx-auto max-w-2xl px-4 py-12 text-center">
@@ -72,7 +74,7 @@ export default function Join() {
           <p className="label-tech mb-3">What happens next</p>
           <ol className="space-y-2 text-sm">
             <li className="flex gap-3"><span className="text-primary">01</span> Oketex reviews your application (usually within 1–2 working days).</li>
-            <li className="flex gap-3"><span className="text-primary">02</span> Once approved, your listing goes live in the directory and customers can send you tracked leads.</li>
+            <li className="flex gap-3"><span className="text-primary">02</span> Once approved, your listing goes live in the directory.{created.role !== "seller" ? " Jobs get assigned to you by the office — leads, job-board wins and Snap & Send dispatches." : ""}{created.role !== "pro" ? " Sellers receive orders routed by admin — and Supply Requests when Oketex itself needs your items." : ""}</li>
             <li className="flex gap-3"><span className="text-primary">03</span> Optional upgrades: <BadgeCheck className="inline h-4 w-4 text-primary -mt-0.5" /> Verified badge {formatNGN(TERMS.verificationFeeNgn)} one-time · <Star className="inline h-4 w-4 text-primary -mt-0.5" /> Featured {formatNGN(TERMS.featuredFeeNgn)}/month (current launch terms).</li>
           </ol>
         </div>
@@ -85,13 +87,13 @@ export default function Join() {
   }
 
   return (<div>
-    <PageHead kicker="Partner Network — Register" title="Join as a Pro or Seller" lead="Register free. Oketex approves every listing, recommends approved partners to customers, pushes supply offers to the network and tracks every lead — so you get work, and we grow the network together." />
+    <PageHead kicker="Partner Network — Register" title="Join as a Pro, Seller — or Both" lead="Register free. The network runs BOTH directions through the Oketex office: pros and engineers get jobs assigned to them (leads, job-board wins, Snap & Send dispatches); sellers receive customer orders — and can also supply Oketex itself when the factory raises a Supply Request. Oketex approves every listing and tracks every deal." />
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 grid lg:grid-cols-[1fr_380px] gap-10">
       <div className="space-y-8">
         <div>
           <p className="label-tech mb-4">01 — I am a…</p>
           <div className="flex gap-px bg-border border hairline w-fit">
-            {([["pro", "Professional / Pro"], ["seller", "Materials Seller"]] as const).map(([v, l]) => (
+            {([["pro", "Professional / Pro"], ["seller", "Materials Seller"], ["both", "Both — Pro + Seller"]] as const).map(([v, l]) => (
               <button key={v} onClick={() => { setRole(v); setTags([]); }} className={cn("px-6 py-3 font-display font-semibold uppercase tracking-wider cursor-pointer", role === v ? "bg-primary text-primary-foreground" : "bg-background hover:text-primary")}>{l}</button>
             ))}
           </div>
@@ -105,7 +107,7 @@ export default function Join() {
             <div><label className="label-tech" htmlFor="j-email">Email (optional)</label><input id="j-email" type="email" className="field-tech" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="you@business.ng" /></div>
             <div><label className="label-tech" htmlFor="j-location">Base location (city / state) *</label><input id="j-location" className="field-tech" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="e.g. Ajah, Lagos" /></div>
             <div><label className="label-tech" htmlFor="j-areas">Areas you serve / deliver to</label><input id="j-areas" className="field-tech" value={form.areas} onChange={e => setForm({ ...form, areas: e.target.value })} placeholder="e.g. Lagos, Ogun, Oyo" /></div>
-            {role === "pro" && (<>
+            {role !== "seller" && (<>
               <div><label className="label-tech" htmlFor="j-years">Years of experience</label><input id="j-years" inputMode="numeric" className="field-tech" value={form.years} onChange={e => setForm({ ...form, years: e.target.value })} placeholder="e.g. 8" /></div>
               <div><label className="label-tech" htmlFor="j-cac">CAC number (optional)</label><input id="j-cac" className="field-tech" value={form.cac} onChange={e => setForm({ ...form, cac: e.target.value })} placeholder="RC number if registered" /></div>
             </>)}
@@ -114,10 +116,10 @@ export default function Join() {
           </div>
         </div>
         <div>
-          <p className="label-tech mb-4">03 — {role === "pro" ? "Your trades" : "What you sell"}</p>
+          <p className="label-tech mb-4">03 — {role === "pro" ? "Your trades" : role === "seller" ? "What you sell" : "Your trades & what you sell"}</p>
           <div className="flex flex-wrap gap-2">{tagOptions.map(t => (<button key={t} onClick={() => toggleTag(t)} className={cn("border px-3 py-2 font-tech text-xs uppercase tracking-wider cursor-pointer", tags.includes(t) ? "border-primary bg-primary/15 text-primary" : "hairline hover:border-primary/60")}>{t}</button>))}</div>
         </div>
-        {role === "seller" && (
+        {role !== "pro" && (
           <div>
             <p className="label-tech mb-4">04 — Your products (shown on your storefront)</p>
             <div className="space-y-3">
@@ -133,6 +135,13 @@ export default function Join() {
             </div>
           </div>
         )}
+        {role !== "pro" && (
+          <div>
+            <p className="label-tech mb-4">05 — What you can supply Oketex</p>
+            <p className="font-tech text-[11px] text-muted-foreground mb-3">Items and equipment you sell or hire out to the Oketex factory itself — one per line. When admin raises a Supply Request matching this list, you are invited to quote; quotes stay private between you and Oketex, and procurement carries no commission.</p>
+            <textarea rows={3} className="field-tech resize-none" value={supplyText} onChange={e => setSupplyText(e.target.value)} placeholder={"Aluminium coils 0.45mm\nRain gutters & downpipes\nGenerator hire (20kVA)"} aria-label="What you can supply Oketex" />
+          </div>
+        )}
       </div>
 
       <aside className="border hairline bg-card h-fit lg:sticky lg:top-28">
@@ -143,6 +152,10 @@ export default function Join() {
           <div className="flex justify-between border-b hairline pb-3"><span className="text-muted-foreground">Verified badge (optional)</span><span className="font-tech">{formatNGN(TERMS.verificationFeeNgn)} one-time</span></div>
           <div className="flex justify-between border-b hairline pb-3"><span className="text-muted-foreground">Featured placement (optional)</span><span className="font-tech">{formatNGN(TERMS.featuredFeeNgn)} / month</span></div>
           <p className="font-tech text-[11px] text-muted-foreground">{TERMS.currencyNote} Commission is charged to you (the partner), never added to the customer's price. Current launch terms — Oketex will notify partners before any change.</p>
+          <div className="border hairline p-4">
+            <p className="label-tech mb-2">Admin-routed deals — the network rule</p>
+            <p className="font-tech text-[11px] text-muted-foreground">All customers and jobs that come through Oketex are served through Oketex admin. Contact details are exchanged by admin when a job is assigned. Taking platform customers off-platform to avoid commission may lead to removal from the network.</p>
+          </div>
           <label className="flex items-start gap-3 cursor-pointer border hairline p-4 hover:border-primary/60">
             <Checkbox checked={agree} onCheckedChange={v => setAgree(!!v)} className="mt-0.5" />
             <span>I agree to the Oketex Partner Network launch terms above, including the {TERMS.referralCommissionPct}% referral commission on work I win through Oketex leads.</span>

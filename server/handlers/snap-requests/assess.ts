@@ -1,14 +1,15 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../../http.js";
 import { isDbConfigured } from "../../db.js";
-import { isAdmin } from "../../auth.js";
+import { requireRole, roleErrorBody } from "../../auth.js";
 import { loadSnap, saveSnap, pushTimeline, cleanAssessment, snapAssessmentTotal, ngn } from "../../snapStore.js";
-// POST /api/snap-requests/assess (admin) — price a Snap & Send request:
+// POST /api/snap-requests/assess (owner + operations) — price a Snap & Send request:
 // items + workmanship + transport + dispatch → total computed SERVER-side
 // (mirrors assessmentTotal in src/lib/snapRequests.ts), status → Priced.
 export default wrap(async (req: any, res: any) => {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   if (!isDbConfigured()) return sendJson(res, 503, { error: "Database not configured", live: false });
-  if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+  const gate = await requireRole(req, ["admin", "operations"]);
+  if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
   const b = await readJson(req);
   const code = String(b.code || "").trim().toUpperCase();
   if (!code) return sendJson(res, 400, { error: "Missing request code" });

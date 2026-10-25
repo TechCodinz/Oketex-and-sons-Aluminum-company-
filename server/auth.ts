@@ -10,9 +10,21 @@ import { dbQuery } from "./db.js";
 export const SESSION_COOKIE = "oketex_session";
 const SESSION_DAYS = 7;
 
+/** Staff roles (Staff System, 2026-10-25). "admin" is the OWNER / super
+ *  admin — it passes every role gate. Customers and partners are not staff. */
+export const STAFF_ROLES = [
+  "admin", "sales", "operations", "store", "accounts", "support", "field",
+  "production_manager", "operator", "qc", "warehouse", "dispatch", "maintenance",
+] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
+export type UserRole = "customer" | "partner" | StaffRole;
+export function isStaffRole(role?: string | null): role is StaffRole {
+  return !!role && (STAFF_ROLES as readonly string[]).includes(role);
+}
+
 export interface SessionUser {
   id: number | string; name: string; email: string; phone?: string;
-  role: "customer" | "partner" | "admin"; partnerCode?: string | null;
+  role: UserRole; partnerCode?: string | null; active?: boolean;
 }
 
 function secret(): Uint8Array {
@@ -72,6 +84,21 @@ export async function isAdmin(req: any): Promise<boolean> {
   const u = await getSessionUser(req);
   return !!u && u.role === "admin";
 }
+/** Role gate for staff endpoints. The owner ("admin") passes every gate.
+ *  Returns { user } on success, or { error } with an HTTP status:
+ *  401 when there is no staff session at all (signed out, or a customer /
+ *  partner account — the long-standing "Admin session required" case), and
+ *  403 when a signed-in STAFF member's role does not cover the endpoint. */
+export async function requireRole(req: any, roles: StaffRole[]): Promise<{ user: SessionUser } | { error: number }> {
+  const u = await getSessionUser(req);
+  if (!u) return { error: 401 };
+  if (u.role === "admin" || (roles as string[]).includes(u.role)) return { user: u };
+  if (isStaffRole(u.role)) return { error: 403 };
+  return { error: 401 };
+}
+export function roleErrorBody(status: number): { error: string } {
+  return { error: status === 403 ? "Your staff role does not cover this action" : "Admin session required" };
+}
 /** Load a users row by email (null when absent / DB off). */
 export async function findUserByEmail(email: string): Promise<any | null> {
   const rows = await dbQuery(`SELECT * FROM users WHERE lower(email) = lower($1) LIMIT 1`, [email]);
@@ -81,6 +108,7 @@ export function publicUser(row: any): SessionUser & { createdAt?: string } {
   return {
     id: row.id, name: row.name || "", email: row.email, phone: row.phone || "",
     role: row.role || "customer", partnerCode: row.partner_code ?? null,
+    active: row.active !== false,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
   };
 }

@@ -2,6 +2,7 @@ import { sendJson, methodNotAllowed, readJson, wrap } from "../../http.js";
 import { dbQuery, isDbConfigured } from "../../db.js";
 import { jobFromRow, bidFromRow, leadFromRow } from "../../records.js";
 import { getServerPartnerTerms, commissionForValue } from "../../siteSettings.js";
+import { logActivityServer } from "../../activityLog.js";
 // POST {jobCode, bidId} → award a job to a bid: winning bid Accepted, other
 // Pending bids Rejected, job → Awarded, and a tracked network LEAD is created
 // for the winning partner with the commission % snapshotted from the
@@ -35,5 +36,6 @@ export default wrap(async (req: any, res: any) => {
      `Won bid on job ${jobCode} — ${job.title}`, est, terms.referralCommissionPct, commissionForValue(est, terms.referralCommissionPct)],
   );
   const allBids = await dbQuery(`SELECT * FROM bids WHERE job_code = $1 ORDER BY created_at ASC`, [jobCode]);
+  await logActivityServer({ name: "Customer (self-serve award)", role: "system" }, "job_awarded", jobCode, `Bid accepted from ${bid.partner_name} — lead ${leadId} created`);
   return sendJson(res, 200, { job: jobFromRow(jobRows[0]), bids: allBids.map(bidFromRow), bid: bidFromRow(winRows[0]), lead: leadFromRow(leadRows[0]) });
 });

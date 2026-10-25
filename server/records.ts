@@ -13,8 +13,14 @@ export function partnerFromRow(r: any): any {
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
   };
 }
-export function leadFromRow(r: any): any {
-  return {
+/** PUBLIC partner shape (Admin-Routing rule): the directory and profile
+ *  endpoints never expose a partner's phone or email — all contact is
+ *  routed through Oketex admin. Mirrors the jobs customerPhone strip. */
+export function publicPartnerFromRow(r: any): any {
+  const p = partnerFromRow(r);
+  return { ...p, phone: "", email: undefined };
+}
+export function leadFromRow(r: any): any {  return {
     id: r.id, partnerCode: r.partner_code, partnerName: r.partner_name, type: r.type,
     customerName: r.customer_name, customerPhone: r.customer_phone, description: r.description,
     estValueNgn: Number(r.est_value_ngn) || 0, commissionPct: Number(r.commission_pct) || 0,
@@ -105,5 +111,60 @@ export function offerFromRow(r: any): any {
     id: r.id, productName: r.product_name, priceNgn: Number(r.price_ngn) || 0, unit: r.unit,
     note: r.note, audience: r.audience,
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : r.createdAt,
+  };
+}
+
+/** Staff directory shape (Staff System) — a users row with a staff role.
+ *  Never carries the password hash. */
+export function staffFromRow(r: any): any {
+  return {
+    id: r.id, name: r.name || "", email: r.email, phone: r.phone || "",
+    role: r.role || "customer", active: r.active !== false,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+  };
+}
+export function activityFromRow(r: any): any {
+  return {
+    id: r.id, ts: r.created_at ? new Date(r.created_at).toISOString() : r.created_at,
+    actorName: r.actor_name || "", actorRole: r.actor_role || "",
+    action: r.action || "", refCode: r.ref_code || "", detail: r.detail || "",
+  };
+}
+/** Production job card (Factory wing) — full card in `data` jsonb, columns win. */
+export function productionFromRow(r: any): any {
+  const d = typeof r.data === "string" ? JSON.parse(r.data || "{}") : (r.data || {});
+  return {
+    ...d,
+    code: r.code,
+    orderCode: r.order_code ?? d.orderCode ?? "",
+    customerName: r.customer_name ?? d.customerName ?? "",
+    status: r.status ?? d.status ?? "Queued",
+    operatorName: r.operator_name ?? d.operatorName ?? "",
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
+  };
+}
+
+/** Supply request (Stage S3) — full record in `data` jsonb, columns win.
+ *  PRIVACY: a partner reading a request sees ONLY their own quote — other
+ *  partners' prices are stripped server-side, never merely hidden in the UI.
+ *  Pass opts.partnerCode for the partner view; omit it for staff. */
+export function supplyFromRow(r: any, opts: { partnerCode?: string } = {}): any {
+  const d = typeof r.data === "string" ? JSON.parse(r.data || "{}") : (r.data || {});
+  const allQuotes = Array.isArray(d.quotes) ? d.quotes : [];
+  const quotes = opts.partnerCode
+    ? allQuotes.filter((q: any) => q.partnerCode === opts.partnerCode)
+    : allQuotes;
+  return {
+    ...d,
+    code: r.code,
+    type: r.type ?? d.type ?? "buy",
+    item: r.item ?? d.item ?? "",
+    status: r.status ?? d.status ?? "Open",
+    chosenPartnerCode: r.chosen_partner_code ?? d.chosenPartnerCode ?? null,
+    chosenTotalNgn: r.chosen_total_ngn == null ? (d.chosenTotalNgn ?? null) : Number(r.chosen_total_ngn),
+    quotes,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
   };
 }

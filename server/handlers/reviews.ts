@@ -1,7 +1,7 @@
 import { sendJson, methodNotAllowed, readJson, wrap } from "../http.js";
 import { dbQuery, isDbConfigured } from "../db.js";
 import { reviewFromRow } from "../records.js";
-import { isAdmin } from "../auth.js";
+import { requireRole, roleErrorBody } from "../auth.js";
 // Partner reviews (Phase 6). POST (public) → create, status Published.
 // A refCode (lead / order / job code) is REQUIRED — reviews stay tied to
 // real work, matching the UI honesty gate.
@@ -41,12 +41,15 @@ export default wrap(async (req: any, res: any) => {
       const rows = await dbQuery(`SELECT * FROM reviews WHERE status = 'Published' ORDER BY created_at DESC LIMIT 1000`);
       return sendJson(res, 200, { reviews: rows.map(reviewFromRow) });
     }
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    // Moderation list + actions: owner + support (Staff System role gate).
+    const gate = await requireRole(req, ["admin", "support"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     const rows = await dbQuery(`SELECT * FROM reviews ORDER BY created_at DESC LIMIT 500`);
     return sendJson(res, 200, { reviews: rows.map(reviewFromRow) });
   }
   if (req.method === "PATCH" || req.method === "DELETE") {
-    if (!(await isAdmin(req))) return sendJson(res, 401, { error: "Admin session required" });
+    const gate = await requireRole(req, ["admin", "support"]);
+    if ("error" in gate) return sendJson(res, gate.error, roleErrorBody(gate.error));
     if (req.method === "DELETE") {
       const id = String(req.query?.id || "");
       if (!id) return sendJson(res, 400, { error: "Missing review id" });

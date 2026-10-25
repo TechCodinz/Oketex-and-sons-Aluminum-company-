@@ -33,6 +33,10 @@ import snapAssign from "./handlers/snap-requests/assign.js";
 import notifications from "./handlers/notifications.js";
 import notificationsDispatch from "./handlers/notifications/dispatch.js";
 import aiAssist from "./handlers/ai/assist.js";
+import staff from "./handlers/staff.js";
+import activity from "./handlers/activity.js";
+import production from "./handlers/production.js";
+import supply from "./handlers/supply.js";
 
 const exact: Record<string, any> = {
   "/api/health": health,
@@ -62,6 +66,10 @@ const exact: Record<string, any> = {
   "/api/notifications": notifications,
   "/api/notifications/dispatch": notificationsDispatch,
   "/api/ai/assist": aiAssist,
+  "/api/staff": staff,
+  "/api/activity": activity,
+  "/api/production": production,
+  "/api/supply": supply,
 };
 
 export default async function router(req: any, res: any) {
