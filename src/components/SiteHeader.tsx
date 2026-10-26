@@ -25,6 +25,7 @@ const NAV = [
   { to: "/assistant", k: "nav.assistant" },
 ];
 const NAV_EXTRA = [
+  { to: "/pro-guide", k: "nav.proGuide" },
   { to: "/documents", k: "nav.documents" },
   { to: "/roofing-guide", k: "nav.roofingGuide" },
   { to: "/plans", k: "nav.gopro" },

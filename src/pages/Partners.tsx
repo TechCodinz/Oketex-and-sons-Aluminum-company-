@@ -62,7 +62,7 @@ export default function Partners() {
   }, [all, kind, tag, search, loc]);
 
   return (<div>
-    <PageHead kicker="Partner Network" title="Nigeria's building pros & materials sellers — vetted by Oketex" lead="Hire approved pros for your job, or order materials from approved sellers. Requests placed through Oketex are tracked as network leads — partners settle a flat referral commission with Oketex only when they win the work (current launch terms)." />
+    <PageHead kicker="Partner Network" title="Nigeria's building pros & materials sellers — vetted by Oketex" lead="We cover all building material construction business — every material, every trade, one network. Hire approved pros for your job, or order materials from approved sellers. Requests placed through Oketex are tracked as network leads — partners settle a flat referral commission with Oketex only when they win the work (current launch terms)." />
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
       <div className="flex flex-wrap gap-3 items-center justify-between mb-8">
         <div className="flex gap-px bg-border border hairline w-fit flex-wrap">

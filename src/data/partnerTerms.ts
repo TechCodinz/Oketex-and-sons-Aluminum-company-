@@ -25,6 +25,7 @@ export type OfferAudience = "all" | "pros" | "sellers";
 export const PRO_TRADES = [
   "Roofer", "Engineer", "Carpenter", "Tiler", "Plumber", "Electrician",
   "Painter", "Builder", "Welder/Steel", "POP/Ceiling", "Surveyor",
+  "Interior & Cabinetry", "Interior Decoration",
 ] as const;
 
 export const SELLER_CATEGORIES = [

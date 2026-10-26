@@ -11,6 +11,7 @@ import { summarizeReviews, type Review } from "./reviews";
 import { partnerAvailable, type Partner, type Lead } from "./partnerStorage";
 import { lowStockFlags, type StockDoc, type CoilStock } from "./stock";
 import { formatNGN } from "./money";
+import { knowledgeBriefing, type KnowledgeEntry } from "./knowledge";
 import type { LocalOrder, LocalQuote } from "./storage";
 import type { LocalBooking } from "./proStorage";
 import type { SnapRequest } from "./snapRequests";
@@ -26,6 +27,7 @@ export interface OpsData {
   invoices: DocInvoice[]; productionJobs: ProductionJob[];
   stock: StockDoc; staffPhones?: { name: string; phone: string }[];
   supplyRequests?: SupplyRequest[];
+  knowledgeEntries?: KnowledgeEntry[];
 }
 
 const HOUR = 3600_000;
@@ -42,6 +44,7 @@ export interface OpsBriefing {
   pending: AttentionRow[];
   production: { queuedStale: ProductionJob[]; qcFailuresToday: number; lowStock: CoilStock[]; bundledStale: ProductionJob[] };
   supply: { awaitingQuotesStale: SupplyRequest[]; approvedOverdue: SupplyRequest[] };
+  knowledge: { pendingReview: number; topFixThisWeek: { title: string; confirmations: number } | null };
 }
 export function buildBriefing(data: OpsData, now: Date = new Date()): OpsBriefing {
   const newToday = [
@@ -90,7 +93,8 @@ export function buildBriefing(data: OpsData, now: Date = new Date()): OpsBriefin
     awaitingQuotesStale: supplyReqs.filter(r => r.status === "Open" && ageHours(r.createdAt, now) > 48),
     approvedOverdue: supplyReqs.filter(r => r.status === "Approved" && !!r.neededBy && r.neededBy < now.toISOString().slice(0, 10)),
   };
-  return { newToday, stuck, money, pending, production, supply };
+  const knowledge = knowledgeBriefing(data.knowledgeEntries || [], now);
+  return { newToday, stuck, money, pending, production, supply, knowledge };
 }
 
 // ---------------- Chasers ----------------

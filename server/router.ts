@@ -37,6 +37,7 @@ import staff from "./handlers/staff.js";
 import activity from "./handlers/activity.js";
 import production from "./handlers/production.js";
 import supply from "./handlers/supply.js";
+import knowledge from "./handlers/knowledge.js";
 
 const exact: Record<string, any> = {
   "/api/health": health,
@@ -70,6 +71,7 @@ const exact: Record<string, any> = {
   "/api/activity": activity,
   "/api/production": production,
   "/api/supply": supply,
+  "/api/knowledge": knowledge,
 };
 
 export default async function router(req: any, res: any) {

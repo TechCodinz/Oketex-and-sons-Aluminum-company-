@@ -32,6 +32,7 @@ export { default as staff } from "../server/handlers/staff.js";
 export { default as activity } from "../server/handlers/activity.js";
 export { default as production } from "../server/handlers/production.js";
 export { default as supply } from "../server/handlers/supply.js";
+export { default as knowledge } from "../server/handlers/knowledge.js";
 export * as authLib from "../server/auth";
 export * as paystackLib from "../server/paystack";
 export { SCHEMA_STATEMENTS, SCHEMA_SQL } from "../server/schema.sql";

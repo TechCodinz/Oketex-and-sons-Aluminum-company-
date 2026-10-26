@@ -21,6 +21,15 @@ export interface EffectiveRates {
    *  Charged ONCE per order (never per item) and only when the customer
    *  picks a paid delivery zone — pickup never pays it. */
   dispatchFeeNgn: number;
+  /** Boards & Panels sales line (per 8×4ft sheet) + cabinetry labour
+   *  (₦ per linear metre of cabinet run). The shop's board products and
+   *  the Interior & Cabinetry estimator both read THESE values, so one
+   *  admin edit reprices both. Defaults are estimator-rate-style seeds
+   *  for the owner to confirm — same status as ridge/timber defaults. */
+  marinePlywoodSheet: number; mdfSheet: number; hdfSheet: number;
+  particleBoardSheet: number; blockboardSheet: number;
+  plywood12Sheet: number; plywood6Sheet: number;
+  cabinetLabourPerM: number;
 }
 export interface EffectiveBusiness {
   name: string; shortName: string; phone: string; whatsapp: string; email: string; address: string; hours: string;
@@ -40,7 +49,7 @@ export interface OketexSettings {
   /** Subscription plans (Deliverable F) — full array replaces defaults when set. PlanDef lives in lib/plans.ts. */
   plans?: import("./plans").PlanDef[];
   partnerTerms?: Partial<EffectivePartnerTerms>;
-  rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number; dispatchFeeNgn?: number };
+  rates?: { deliveryZones?: Record<string, number>; installationPerM2?: number; ridgePerM?: number; timberPerM?: number; dispatchFeeNgn?: number; marinePlywoodSheet?: number; mdfSheet?: number; hdfSheet?: number; particleBoardSheet?: number; blockboardSheet?: number; plywood12Sheet?: number; plywood6Sheet?: number; cabinetLabourPerM?: number };
   business?: Partial<Pick<EffectiveBusiness, "phone" | "whatsapp" | "email" | "address" | "hours">>;
   /** Phase 6 promotions: discount coupons + the site-wide promo banner. */
   coupons?: Coupon[];
@@ -56,6 +65,16 @@ export const DEFAULT_RATES: EffectiveRates = {
   ridgePerM: 4500,
   timberPerM: 1800,
   dispatchFeeNgn: 0,
+  // Boards & cabinetry seed defaults (per 8×4 sheet) — OWNER TO CONFIRM,
+  // same footing as the ridge/timber estimator-rate defaults above.
+  marinePlywoodSheet: 95000,
+  mdfSheet: 68000,
+  hdfSheet: 58000,
+  particleBoardSheet: 38000,
+  blockboardSheet: 55000,
+  plywood12Sheet: 48000,
+  plywood6Sheet: 30000,
+  cabinetLabourPerM: 45000,
 };
 
 const KEY = "oketex-settings";
@@ -126,6 +145,14 @@ export function getRates(): EffectiveRates {
     ridgePerM: num(o.ridgePerM, DEFAULT_RATES.ridgePerM),
     timberPerM: num(o.timberPerM, DEFAULT_RATES.timberPerM),
     dispatchFeeNgn: num(o.dispatchFeeNgn, DEFAULT_RATES.dispatchFeeNgn),
+    marinePlywoodSheet: num(o.marinePlywoodSheet, DEFAULT_RATES.marinePlywoodSheet),
+    mdfSheet: num(o.mdfSheet, DEFAULT_RATES.mdfSheet),
+    hdfSheet: num(o.hdfSheet, DEFAULT_RATES.hdfSheet),
+    particleBoardSheet: num(o.particleBoardSheet, DEFAULT_RATES.particleBoardSheet),
+    blockboardSheet: num(o.blockboardSheet, DEFAULT_RATES.blockboardSheet),
+    plywood12Sheet: num(o.plywood12Sheet, DEFAULT_RATES.plywood12Sheet),
+    plywood6Sheet: num(o.plywood6Sheet, DEFAULT_RATES.plywood6Sheet),
+    cabinetLabourPerM: num(o.cabinetLabourPerM, DEFAULT_RATES.cabinetLabourPerM),
   };
 }
 export function getBusiness(): EffectiveBusiness {

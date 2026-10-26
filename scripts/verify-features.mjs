@@ -21,6 +21,14 @@ export { buildBriefing, draftAssessment, recommendPartners, haversineKm } from "
 export { cuttingListTotal, canTransition } from "@/lib/production";
 export { lowStockFlags } from "@/lib/stock";
 export { supplyQuoteTotal, capabilityMatch, supplyCandidates } from "@/lib/supply";
+export { ROOF_STYLES } from "@/data/roofingGuide";
+export { ROOF_PATTERNS, ROOF_DETAILS, identifyGuide, gutterFall, slopeDims, overlapSummary, VALLEY_TRAY_WIDTH_MM } from "@/data/roofPatterns";
+export { TRADE_CARDS, cabinetUnits } from "@/data/tradeGuides";
+export { STANDARD_TOOLS } from "@/lib/snapRequests";
+export { mergeLibrary, validateContribution, knowledgeBriefing } from "@/lib/knowledge";
+export { DEFAULT_RATES, getRates } from "@/lib/settings";
+export { products, productPrice } from "@/data/catalog";
+export { estimateProject, defaultEstimatorInput } from "@/lib/projectEstimator";
 `;
 writeFileSync("/tmp/verify-entry.ts", entry);
 await build({ entryPoints: ["/tmp/verify-entry.ts"], bundle: true, platform: "node", format: "esm", outfile: "/tmp/verify-bundle.mjs", alias: { "@": process.cwd() + "/src" }, logLevel: "silent" });
@@ -288,6 +296,103 @@ const briefing = M.buildBriefing({
   snapRequests: [{ code: "SR-OLD", status: "Received", customerName: "Stuck Customer", createdAt: old25h, updatedAt: old25h }],
 }, fixedNow);
 ok("briefing flags the 25h-old snap request as stuck", briefing.stuck.some(x => x.code === "SR-OLD" && x.ageHours >= 25));
+
+console.log("— Pro Guide pattern library (2026-10-26) —");
+ok(`library has at least guide styles (${M.ROOF_STYLES.length}) + 8 patterns`, M.ROOF_PATTERNS.length >= M.ROOF_STYLES.length + 8);
+const FAMILIES = ["Aluminium profile", "Stone-coated", "Shingle", "Standing seam", "Concrete/flat", "Traditional"];
+const TOOLSET = new Set(M.STANDARD_TOOLS);
+let complete = true;
+for (const p of M.ROOF_PATTERNS) {
+  if (!p.name || !FAMILIES.includes(p.family)) complete = false;
+  if (!Array.isArray(p.pitchRangeDeg) || p.pitchRangeDeg[0] > p.pitchRangeDeg[1]) complete = false;
+  if (!p.gaugeOptions || !p.fastenerPattern || !p.bestFor || !p.avoidWhen) complete = false;
+  if (!p.overlapMm || (!p.overlapMm.sideMm && !p.overlapMm.endMm && !p.overlapMm.note)) complete = false;
+  if (!Array.isArray(p.installSteps) || p.installSteps.length < 5 || p.installSteps.length > 8) complete = false;
+  if (!Array.isArray(p.commonFixes) || !p.commonFixes.length || p.commonFixes.some(f => !f.problem || !f.fix)) complete = false;
+  if (!Array.isArray(p.tools) || !p.tools.length || p.tools.some(t => !TOOLSET.has(t))) complete = false;
+  if (!Array.isArray(p.materials) || !p.materials.length) complete = false;
+  if (Object.keys(p).some(k => /price/i.test(k))) complete = false;
+}
+ok("every pattern has complete fields, tools from the STANDARD_TOOLS vocabulary, and NO price fields", complete);
+ok("all 10 guide styles are mapped into the library", M.ROOF_PATTERNS.filter(p => p.guideKind).length === M.ROOF_STYLES.length);
+ok("at least 6 detail cards (valley/ridge/flashing/gutter/fascia/leak-hunt)", M.ROOF_DETAILS.length >= 6 && M.ROOF_DETAILS.every(d => d.steps.length >= 4 && d.keySpecs.length >= 4));
+eq("valley tray width constant", M.VALLEY_TRAY_WIDTH_MM, 450);
+
+console.log("— Sketch maths —");
+eq("gutter fall: 8m run at 1:200 -> 40mm drop", M.gutterFall(8, 200).dropMm, 40);
+eq("gutter fall: 10m run at 1:350 -> 28.6mm drop", M.gutterFall(10, 350).dropMm, 28.6);
+const sd = M.slopeDims(5.08, 25);
+eq("slope dims: 5.08m at 25° horizontal", sd.horizontalM, 4.60);
+eq("slope dims: 5.08m at 25° vertical", sd.verticalM, 2.15);
+const ls = M.ROOF_PATTERNS.find(p => p.id === "longspan");
+ok("overlap label equals pattern data (longspan end lap 200mm)", M.overlapSummary(ls).includes(`${ls.overlapMm.endMm}mm`));
+
+console.log("— Guided identification —");
+const idValley = M.identifyGuide({ area: "valley", material: "aluminium", problem: "leak" });
+ok("valley + leak -> valley detail card", idValley.kind === "detail" && idValley.id === "valley");
+const idStone = M.identifyGuide({ area: "roof-surface", material: "stone-coated", problem: "forgot-pattern" });
+ok("roof surface + stone-coated -> stone-classic pattern", idStone.kind === "pattern" && idStone.id === "stone-classic");
+const idLeak = M.identifyGuide({ area: "leak-hunt", material: "not-sure", problem: "leak" });
+ok("leak hunt -> leak-hunt detail", idLeak.kind === "detail" && idLeak.id === "leak-hunt");
+
+console.log("— Living knowledge: merge + validation —");
+const seeds = [
+  { id: "longspan", kind: "pattern", trade: "Roofing", title: "Aluminium Longspan" },
+  { id: "valley", kind: "detail", trade: "Roofing", title: "Valley detail" },
+];
+const community = [
+  { id: "KNW-1", kind: "fix", trade: "Roofing", title: "Community fix A", body: "x".repeat(30), tools: [], source: "pro", contributorName: "Pro A", contributorCode: "PRT-A", status: "approved", confirmations: 3, confirmedBy: [], createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z" },
+  { id: "KNW-2", kind: "tip", trade: "Roofing", title: "Pending tip", body: "x".repeat(30), tools: [], source: "pro", contributorName: "Pro B", contributorCode: "PRT-B", status: "pending", confirmations: 99, confirmedBy: [], createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z" },
+  { id: "longspan", kind: "seedref", trade: "Roofing", title: "Aluminium Longspan", body: "", tools: [], source: "seed", contributorName: "", contributorCode: "", status: "approved", confirmations: 5, confirmedBy: [], createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z" },
+];
+const mergedLib = M.mergeLibrary(seeds, community, {});
+eq("merge folds the seedref pointer into the seed (3 rows, not 4)", mergedLib.length, 3);
+eq("merge: seed confirmations = pointer count", mergedLib.find(r => r.id === "longspan")?.confirmations, 5);
+ok("merge: pending community entry is NOT surfaced", !mergedLib.some(r => r.id === "KNW-2"));
+eq("merge sorts by confirmations desc (seed 5 > community 3 > detail 0)", mergedLib.map(r => r.id).join(","), "longspan,KNW-1,valley");
+const mergedLocal = M.mergeLibrary(seeds, [], { longspan: { count: 2, by: ["PRT-X"] } });
+eq("merge: device seed confirmations add in", mergedLocal.find(r => r.id === "longspan")?.confirmations, 2);
+ok("validation: empty title rejected", M.validateContribution({ kind: "fix", trade: "Roofing", title: "", body: "x".repeat(30) }) !== null);
+ok("validation: short body rejected", M.validateContribution({ kind: "fix", trade: "Roofing", title: "Good title", body: "too short" }) !== null);
+ok("validation: unknown trade rejected", M.validateContribution({ kind: "fix", trade: "Astrology", title: "Good title", body: "x".repeat(30) }) !== null);
+ok("validation: complete contribution accepted", M.validateContribution({ kind: "fix", trade: "Roofing", title: "Good title", body: "x".repeat(30) }) === null);
+const kb = M.knowledgeBriefing([
+  { id: "K1", kind: "fix", trade: "Roofing", title: "Top fix", body: "", tools: [], source: "pro", contributorName: "A", contributorCode: "P1", status: "approved", confirmations: 4, confirmedBy: [], createdAt: "2026-10-24T00:00:00Z", updatedAt: "2026-10-25T00:00:00Z" },
+  { id: "K2", kind: "tip", trade: "Roofing", title: "Waiting tip", body: "", tools: [], source: "pro", contributorName: "B", contributorCode: "P2", status: "pending", confirmations: 0, confirmedBy: [], createdAt: "2026-10-25T00:00:00Z", updatedAt: "2026-10-25T00:00:00Z" },
+], new Date("2026-10-26T12:00:00Z"));
+eq("knowledge briefing: pending review count", kb.pendingReview, 1);
+eq("knowledge briefing: most confirmed fix this week", kb.topFixThisWeek?.title, "Top fix");
+const briefing2 = M.buildBriefing({ orders: [], quotes: [], bookings: [], leads: [], jobs: [], verifyRequests: [], partners: [], reviews: [], invoices: [], productionJobs: [], stock: { items: [], thresholdKg: 500 }, snapRequests: [], knowledgeEntries: [{ id: "K9", kind: "fix", trade: "Tiling", title: "T", body: "", tools: [], source: "pro", contributorName: "A", contributorCode: "P", status: "pending", confirmations: 0, confirmedBy: [], createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z" }] }, fixedNow);
+eq("ops briefing carries the knowledge pending count", briefing2.knowledge.pendingReview, 1);
+
+console.log("— All-trades guide cards —");
+const TRADE_NAMES = ["Plumbing", "Tiling", "Carpentry & Woodwork", "Electrical", "Painting & Finishing", "Concrete & Masonry", "Welding & Metalwork", "Interior & Cabinetry"];
+ok("every non-roofing trade has 3-5 cards", TRADE_NAMES.every(t => { const n = M.TRADE_CARDS.filter(c => c.trade === t).length; return n >= 3 && n <= 5; }));
+ok("every trade card is complete (specs/steps/fixes/tools/materials)", M.TRADE_CARDS.every(c => c.keySpecs.length >= 3 && c.steps.length >= 4 && c.commonFixes.length >= 2 && c.tools.length >= 3 && c.materials.length >= 3 && !!c.whereUsed));
+
+console.log("— Interior, Cabinetry & Boards (Part 3) —");
+const R = M.DEFAULT_RATES;
+ok("board + cabinet rates present in defaults", ["marinePlywoodSheet", "mdfSheet", "hdfSheet", "particleBoardSheet", "blockboardSheet", "plywood12Sheet", "plywood6Sheet", "cabinetLabourPerM"].every(k => typeof R[k] === "number" && R[k] > 0));
+const boardsCat = M.products.filter(p => p.categorySlug === "boards-panels");
+eq("boards & panels line has 7 products", boardsCat.length, 7);
+ok("every board product's catalog price equals its Settings rate default (single source)", boardsCat.every(p => p.rateKey && p.priceNgn === R[p.rateKey]));
+ok("productPrice() resolves the live rate for boards", boardsCat.every(p => M.productPrice(p) === R[p.rateKey]));
+ok("productPrice() leaves non-board products at catalog price", M.products.filter(p => !p.rateKey).every(p => M.productPrice(p) === p.priceNgn));
+const cu = M.cabinetUnits(3.0, 600);
+eq("cabinet sketch maths: 3.0m run of 600mm units -> 5 units", cu.units, 5);
+eq("cabinet sketch maths: last unit is a full 600mm", cu.lastUnitMm, 600);
+eq("cabinet sketch maths: 3.2m run -> 5 units, last 800mm", (() => { const c = M.cabinetUnits(3.2, 600); return `${c.units}/${c.lastUnitMm}`; })(), "5/800");
+const kitchenInput = { ...M.defaultEstimatorInput("interior-cabinetry", "cab-kitchen"), width: 3, height: 2.4, unitCount: 0 };
+const kitchen = M.estimateProject(kitchenInput);
+const boardLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name.includes("HDF boards"));
+eq("estimator kitchen fixture: 3m run x 2.4m -> 5 HDF sheets", boardLine?.qty, 5);
+eq("estimator kitchen fixture: board unit price = live HDF rate", boardLine?.unitPrice, R.hdfSheet);
+const marineLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name.includes("Marine plywood"));
+eq("estimator kitchen fixture: 1 marine sheet for the sink unit", marineLine?.qty, 1);
+const hingeLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name.startsWith("Hinges"));
+eq("estimator kitchen fixture: 5 doors -> 10 hinges", hingeLine?.qty, 10);
+const labourLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name === "Cabinet labour");
+eq("estimator kitchen fixture: labour = 3m at the Settings cabinet rate", labourLine?.total, 3 * R.cabinetLabourPerM);
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

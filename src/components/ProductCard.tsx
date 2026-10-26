@@ -2,10 +2,12 @@ import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Product } from "@/data/catalog";
+import { productPrice } from "@/data/catalog";
 import { useCart } from "@/lib/cart";
 import { formatNGN, formatUSD } from "@/lib/money";
 export function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
+  const price = productPrice(product);
   return (
     <div className="group border hairline bg-card flex flex-col transition-colors hover:border-primary/60">
       <Link to={`/product/${product.slug}`} className="block relative aspect-[4/3] overflow-hidden bg-secondary">
@@ -17,8 +19,8 @@ export function ProductCard({ product }: { product: Product }) {
         <Link to={`/product/${product.slug}`} className="hover:text-primary transition-colors"><h3 className="font-display font-semibold text-lg leading-tight">{product.name}</h3></Link>
         <p className="text-sm text-muted-foreground mt-1 line-clamp-2 flex-1">{product.summary}</p>
         <div className="flex items-end justify-between mt-4 gap-3">
-          <div><div className="font-tech font-semibold text-base">{formatNGN(product.priceNgn)}</div><div className="font-tech text-[11px] text-muted-foreground">{product.unit} · {formatUSD(product.priceNgn)}</div></div>
-          <button disabled={product.stock<=0} onClick={()=>{ add({productId:product.id,slug:product.slug,name:product.name,unit:product.unit,priceNgn:product.priceNgn,image:product.image},1); toast.success(`${product.name} added`); }} className="border hairline p-2.5 hover:bg-primary hover:border-primary hover:text-primary-foreground transition-colors disabled:opacity-40 cursor-pointer" aria-label={`Add ${product.name}`}><Plus className="h-4 w-4" /></button>
+          <div><div className="font-tech font-semibold text-base">{formatNGN(price)}</div><div className="font-tech text-[11px] text-muted-foreground">{product.unit} · {formatUSD(price)}</div></div>
+          <button disabled={product.stock<=0} onClick={()=>{ add({productId:product.id,slug:product.slug,name:product.name,unit:product.unit,priceNgn:price,image:product.image},1); toast.success(`${product.name} added`); }} className="border hairline p-2.5 hover:bg-primary hover:border-primary hover:text-primary-foreground transition-colors disabled:opacity-40 cursor-pointer" aria-label={`Add ${product.name}`}><Plus className="h-4 w-4" /></button>
         </div>
       </div>
     </div>

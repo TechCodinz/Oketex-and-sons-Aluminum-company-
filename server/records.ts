@@ -145,6 +145,25 @@ export function productionFromRow(r: any): any {
   };
 }
 
+/** Knowledge entry (Pro Guide living library) — full entry in `data` jsonb,
+ *  columns win. Community entries only; seed cards stay in code and appear
+ *  here solely as 'seedref' confirmation pointers. */
+export function knowledgeFromRow(r: any): any {
+  const d = typeof r.data === "string" ? JSON.parse(r.data || "{}") : (r.data || {});
+  return {
+    ...d,
+    id: r.id,
+    kind: r.kind ?? d.kind ?? "tip",
+    trade: r.trade ?? d.trade ?? "Roofing",
+    status: r.status ?? d.status ?? "pending",
+    contributorCode: r.contributor_code ?? d.contributorCode ?? "",
+    confirmations: Number(d.confirmations) || 0,
+    confirmedBy: Array.isArray(d.confirmedBy) ? d.confirmedBy : [],
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
+  };
+}
+
 /** Supply request (Stage S3) — full record in `data` jsonb, columns win.
  *  PRIVACY: a partner reading a request sees ONLY their own quote — other
  *  partners' prices are stripped server-side, never merely hidden in the UI.

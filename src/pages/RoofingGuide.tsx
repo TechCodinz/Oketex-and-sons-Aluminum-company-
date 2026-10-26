@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { PageHead } from "@/components/StatusBadge";
 import { ArrowRight, Info } from "lucide-react";
 import { ANATOMY_PARTS, ROOF_STYLES, METHOD_GROUPS, PITCH_MINIMUMS, eavesCalc, pitchFromRiseRun, type PatternKind } from "@/data/roofingGuide";
+import { ROOF_PATTERNS, overlapSummary } from "@/data/roofPatterns";
 
 function PatternPreview({ kind, accent }: { kind: PatternKind; accent: string }) {
   const id = `gp-${kind}`;
@@ -83,6 +84,12 @@ export default function RoofingGuide() {
   const ACCENTS: Record<string, string> = { longspan: "#4A4F54", steptiles: "#6E4A3A", metcoppo: "#8E3B2F", "stone-classic": "#5A4632", "stone-shingle": "#3E4A42", "stone-milano": "#7A3B2E", "stone-roman": "#6B4E2E", "standing-seam": "#37424E", corrugated: "#7C8288", flat: "#55524C" };
 
   return (<div><PageHead kicker="Roofing Guide — Styles, Methods & Measurements" title="Know your roof, part by part" lead="Roof anatomy, every major covering style, and the standard measurements Nigerian pros work to — eaves, fascia, gutters, laps, fixings and pitches, explained plainly." />
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8">
+      <Link to="/pro-guide" className="block border border-primary/60 bg-primary/10 p-5 hover:bg-primary/20">
+        <p className="font-display font-bold uppercase text-xl">On site? Get guided step-by-step →</p>
+        <p className="text-sm text-muted-foreground mt-1">The Pro Guide takes any pattern or detail below and walks you through it: snap or record what you are looking at, get the standard measurements, installation steps, fixes, a dimensioned sketch and a voice guide.</p>
+      </Link>
+    </div>
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 space-y-16">
 
       {/* 1 — Anatomy */}
@@ -126,6 +133,24 @@ export default function RoofingGuide() {
               <Link to="/quote" className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary">Price it in the Calculator</Link>
             </div>
           </div></article>))}</div>
+
+        <h3 className="font-display font-bold uppercase text-2xl mt-12">Advanced profiles &amp; roof forms — new</h3>
+        <p className="text-muted-foreground mt-2 max-w-3xl">From the shared pattern library that also powers the Pro Guide and Visualizer: concealed-fix systems, industrial profiles, imported shingles, heavy traditional tiles, and the roof forms (mono-pitch, butterfly, gambrel, curved) that change how the standard details are built. Full steps, fixes and sketches live in the Pro Guide.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">{ROOF_PATTERNS.filter(p => !p.guideKind).map(p => (<article key={p.id} className="border hairline bg-card p-5">
+          <p className="font-tech text-[10px] uppercase tracking-widest text-primary">{p.family}</p>
+          <h3 className="font-display font-bold uppercase text-lg leading-tight mt-1">{p.name}</h3>
+          <dl className="font-tech text-xs mt-3 space-y-1.5">
+            <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Pitch range</dt><dd className="text-right">{p.pitchRangeDeg[0]}° – {p.pitchRangeDeg[1]}°</dd></div>
+            <div><dt className="text-muted-foreground">Gauge / spec</dt><dd className="mt-0.5">{p.gaugeOptions}</dd></div>
+            <div><dt className="text-muted-foreground">Laps</dt><dd className="mt-0.5">{overlapSummary(p)}</dd></div>
+          </dl>
+          <p className="text-sm mt-3"><span className="text-primary font-tech text-[11px] uppercase tracking-widest">Best for — </span>{p.bestFor}</p>
+          <p className="text-sm mt-2 text-muted-foreground"><span className="font-tech text-[11px] uppercase tracking-widest">Watch out — </span>{p.avoidWhen}</p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Link to={`/pro-guide?pattern=${p.id}`} className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary">Open in the Pro Guide</Link>
+            {p.visualPattern && <Link to="/visualizer" className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary">See it in the Visualizer</Link>}
+          </div>
+        </article>))}</div>
       </section>
 
       {/* 3 — Methods & measurements */}

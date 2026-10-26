@@ -29,6 +29,7 @@ import PartnerStatus from "./pages/PartnerStatus";
 import PaymentReturn from "./pages/PaymentReturn";
 import Documents from "./pages/Documents";
 import RoofingGuide from "./pages/RoofingGuide";
+import ProGuide from "./pages/ProGuide";
 import Plans from "./pages/Plans";
 import Jobs from "./pages/Jobs";
 import SnapSend from "./pages/SnapSend";
@@ -51,6 +52,7 @@ export default function App(){
   <Route path="/workspace" element={<Workspace />} />
   <Route path="/documents" element={<Documents />} />
   <Route path="/roofing-guide" element={<RoofingGuide />} />
+  <Route path="/pro-guide" element={<ProGuide />} />
   <Route path="/plans" element={<Plans />} />
   <Route path="/book" element={<Book />} />
   <Route path="/jobs" element={<Jobs />} />

@@ -238,5 +238,22 @@ export const SCHEMA_STATEMENTS: string[] = [
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `CREATE INDEX IF NOT EXISTS supply_status_idx ON supply_requests (status)`,
+  // ---- Pro Guide living knowledge (2026-10-26): community entries ONLY ----
+  // Built-in (seed) cards live in code (src/data/roofPatterns.ts +
+  // tradeGuides.ts); this table holds partner/staff contributions and,
+  // for seed cards, field-confirmation counts keyed by the seed's id
+  // (kind = 'seedref' pointer rows — content is never duplicated here).
+  `CREATE TABLE IF NOT EXISTS knowledge_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'tip',
+    trade TEXT NOT NULL DEFAULT 'Roofing',
+    status TEXT NOT NULL DEFAULT 'pending',
+    contributor_code TEXT NOT NULL DEFAULT '',
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS knowledge_status_idx ON knowledge_entries (status)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_trade_idx ON knowledge_entries (trade)`,
 ];
 export const SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";

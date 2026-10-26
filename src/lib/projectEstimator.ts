@@ -6,11 +6,12 @@
 import { products } from "@/data/catalog";
 import { calculateRoof, type ProfileId, type RoofStyle } from "./roofEngine";
 import {
-  TRADES, styleById, TILING_WASTE, TILE_SIZES, RECIPES, WOODWORK_RECIPES,
+  TRADES, styleById, TILING_WASTE, TILE_SIZES, RECIPES, WOODWORK_RECIPES, CABINETRY_RECIPES,
   PLUMBING_FIXTURES, PLUMBING_COMMON, INTERIOR_PAINT_LINES, CEILING_LINES,
   WINDOW_EXTRA_LINES, EXTERIOR_RECIPES, EXTERIOR_WASTE,
   type TradeId, type RecipeLine, type LineGroupName, GROUP_ORDER,
 } from "@/data/styleRecipes";
+import { getRates } from "./settings";
 
 export type { TradeId, LineGroupName };
 export { TRADES, GROUP_ORDER };
@@ -88,8 +89,9 @@ function runRecipe(lines: RecipeLine[], d: Drivers, per: Record<string, number>,
     else if (l.rounding === "round2") qty = Math.round(raw * 100) / 100;
     else qty = Math.round(raw * 100) / 100;
     const catP = catalogPrice(l.catalogSlug);
-    const unitPrice = catP ?? l.estimatorPriceNgn;
-    const priceSource: ComputedLine["priceSource"] = catP !== undefined ? "catalog" : l.estimatorPriceNgn !== undefined ? "estimator" : null;
+    const rateP = l.rateKey ? (getRates() as unknown as Record<string, number>)[l.rateKey] : undefined;
+    const unitPrice = catP ?? (typeof rateP === "number" && Number.isFinite(rateP) ? rateP : undefined) ?? l.estimatorPriceNgn;
+    const priceSource: ComputedLine["priceSource"] = catP !== undefined ? "catalog" : unitPrice !== undefined ? "estimator" : null;
     return {
       name: prefix + l.name, group: l.group, qty, unit: l.unit,
       unitPrice, priceSource,
@@ -122,6 +124,7 @@ export function estimateProject(input: EstimatorInput): EstimateResult {
     case "woodwork": return estimateWoodwork(input);
     case "plumbing": return estimatePlumbing(input);
     case "interior": return estimateInterior(input);
+    case "interior-cabinetry": return estimateCabinetry(input);
     case "windows-doors": return estimateWindows(input);
     case "exterior": return estimateExterior(input);
     default: return finish([], [], [`Style: ${style?.name ?? input.styleId}`]);
@@ -229,6 +232,35 @@ function estimateWoodwork(input: EstimatorInput): EstimateResult {
     "Boards are 18mm HDF/MDF sheets of 1.22 × 2.44m (2.98m²); the carcass factor in each board line covers shelves, sides and doors.",
     input.styleId === "wood-louvre" ? "Door count drives this list — set it in Step 3 (Number of doors)." : `Doors estimated at one front per ${doorWidth}m of run — adjust the count in Step 3 if your design differs.`,
     "All woodwork prices are labelled estimator rates — board and hardware prices move with the market.",
+  ]);
+}
+
+// ---------------- Interior & Cabinetry -----------------------------------------
+// Same drivers as woodwork (run × height frontage), but board and labour
+// lines price LIVE from Settings & Rates via rateKey — the same rates the
+// Boards & Panels shop products sell at. Kitchen worked example: a 3.0m
+// run at 2.4m unit height → frontage area 7.2m² → HDF boards
+// ceil(7.2 × 1.9 ÷ 2.98) = 5 sheets; doors round(3.0 ÷ 0.55) = 5.
+function estimateCabinetry(input: EstimatorInput): EstimateResult {
+  const recipe = CABINETRY_RECIPES[input.styleId] ?? CABINETRY_RECIPES["cab-kitchen"];
+  const frontage = Math.max(0, input.width);
+  const area = frontage * Math.max(0, input.height);
+  const doorWidth = input.styleId === "cab-kitchen" ? 0.55 : 0.6;
+  const doors = input.styleId === "cab-door"
+    ? Math.max(0, input.unitCount || Math.round(frontage) || 1)
+    : Math.max(1, Math.round(frontage / doorWidth));
+  const lines = runRecipe(recipe, {
+    area, frontage, doors, perimeter: 0, fixtures: 0, openings: 0, ceilingArea: 0, wallArea: 0, fixed: 1,
+  }, { boardArea: BOARD_AREA }, 0);
+  return finish(lines, [
+    { label: "Run / frontage", value: `${frontage.toFixed(1)} m` },
+    { label: "Unit height", value: `${input.height.toFixed(2)} m` },
+    { label: "Doors / fronts", value: `${doors}` },
+    { label: "Frontage area", value: m2(area) },
+  ], [
+    "Boards are 8×4ft sheets (1.22 × 2.44m = 2.98m²) priced at the LIVE Boards & Panels rates in Admin → Settings & Rates — the same prices as the shop. Change the rate there and this estimate follows.",
+    input.styleId === "cab-door" ? "Door count drives this list — set it in Step 3 (Number of doors)." : `Doors estimated at one front per ${doorWidth}m of run — adjust in Step 3 if your design differs.`,
+    "Hardware (hinges, handles, runners) uses labelled estimator rates; cabinet labour uses the Settings cabinet-labour rate per linear metre.",
   ]);
 }
 

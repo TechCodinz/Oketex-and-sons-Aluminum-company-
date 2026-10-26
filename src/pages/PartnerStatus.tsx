@@ -8,6 +8,9 @@ import { findPartnerOwnerAsync, getLeadsForPartnerAsync, getOffersAsync, partner
 import { getJobsAsync, getPartnerBidsAsync, placeBidAsync, budgetLabel, type Job, type Bid } from "@/lib/jobs";
 import { getSnapRequestsForPartnerAsync, snapProgressAsync, snapPartnerStatusAsync, compressImageFile, SNAP_INTENT_LABEL, type SnapRequest } from "@/lib/snapRequests";
 import { getSupplyForPartnerAsync, quoteSupplyAsync, supplyOutcome, type SupplyRequest } from "@/lib/supply";
+import { KNOWLEDGE_TRADES, listMyKnowledgeAsync, savePartnerProof, submitKnowledgeAsync, type KnowledgeEntry, type KnowledgeKind } from "@/lib/knowledge";
+import { STANDARD_TOOLS } from "@/lib/snapRequests";
+import type { GuideTrade } from "@/data/roofPatterns";
 import { MapCard } from "@/components/MapCard";
 import { notify } from "@/lib/notify";
 import { paymentsApi } from "@/lib/api";
@@ -32,6 +35,18 @@ export default function PartnerStatus() {
   const loadSnapJobs = async (p: Partner) => setSnapJobs(await getSnapRequestsForPartnerAsync(p.code));
   const [supplyReqs, setSupplyReqs] = useState<SupplyRequest[]>([]);
   const [supplyForms, setSupplyForms] = useState<Record<string, { price: string; days: string; note: string }>>({});
+  const [myKnowledge, setMyKnowledge] = useState<KnowledgeEntry[]>([]);
+  const [teach, setTeach] = useState<{ kind: KnowledgeKind; trade: GuideTrade; title: string; body: string; tools: string }>({ kind: "fix", trade: "Roofing", title: "", body: "", tools: "" });
+  const loadKnowledge = async (p: Partner) => setMyKnowledge(await listMyKnowledgeAsync(p, p.phone));
+  const submitTeach = async () => {
+    if (!partner) return;
+    const tools = teach.tools.split(",").map(t => t.trim()).filter(Boolean);
+    const res = await submitKnowledgeAsync({ kind: teach.kind, trade: teach.trade, title: teach.title, body: teach.body, tools }, { partner, phone: partner.phone });
+    if (res.error || !res.entry) { toast.error(res.error || "Could not submit"); return; }
+    setTeach({ kind: "fix", trade: teach.trade, title: "", body: "", tools: "" });
+    await loadKnowledge(partner);
+    toast.success("Lesson submitted — Oketex staff review every contribution before it joins the Pro Guide library.");
+  };
   const loadSupply = async (p: Partner) => setSupplyReqs(p.role === "pro" ? [] : await getSupplyForPartnerAsync(p, p.phone));
   const submitSupplyQuote = async (r: SupplyRequest) => {
     if (!partner) return;
@@ -75,7 +90,8 @@ export default function PartnerStatus() {
     const p = c.trim() ? await findPartnerOwnerAsync(c, phone) : undefined;
     if (c.trim() && !p) toast.error("No match — check your partner code and use the phone number you registered with.");
     setPartner(p);
-    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); return; }
+    if (!p) { setLeads([]); setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); setMyKnowledge([]); return; }
+    savePartnerProof({ code: p.code, phone, name: p.businessName });
     setLeads(await getLeadsForPartnerAsync(p.code));
     if (p.status === "approved") {
       const all = await getOffersAsync();
@@ -85,7 +101,8 @@ export default function PartnerStatus() {
       setMyBids(await getPartnerBidsAsync(p.code));
       await loadSnapJobs(p);
       await loadSupply(p);
-    } else { setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); }
+      await loadKnowledge(p);
+    } else { setOffers([]); setOpenJobs([]); setMyBids([]); setSnapJobs([]); setSupplyReqs([]); setMyKnowledge([]); }
   };
   const submitBid = async (job: Job) => {
     if (!partner) return;
@@ -257,6 +274,44 @@ export default function PartnerStatus() {
                 </div>); })}</div>}
             </section>
             )}
+
+            <section>
+              <h3 className="font-display font-bold uppercase text-2xl mb-1">Teach the system — grow the Pro Guide</h3>
+              <p className="font-tech text-[11px] text-muted-foreground mb-4 max-w-3xl">The Pro Guide is a library that grows with the trade. Share a pattern, a fix or a field tip from your own work — Oketex staff review every lesson before it publishes, badged <b>"From the field — contributed by {partner.businessName}"</b>. Pros in the field can then confirm "this worked for me", and confirmed lessons rank higher for everyone. Customers cannot contribute — this is pros teaching pros.</p>
+              <div className="border hairline bg-card p-5 grid md:grid-cols-2 gap-4">
+                <div><label className="label-tech">Kind</label>
+                  <select value={teach.kind} onChange={e => setTeach({ ...teach, kind: e.target.value as KnowledgeKind })} className="field-tech font-tech bg-background w-full">
+                    <option value="fix">Fix — a problem and how you solved it</option>
+                    <option value="pattern">Pattern — a standard way of building it</option>
+                    <option value="tip">Tip — a field lesson worth passing on</option>
+                  </select></div>
+                <div><label className="label-tech">Trade</label>
+                  <select value={teach.trade} onChange={e => setTeach({ ...teach, trade: e.target.value as GuideTrade })} className="field-tech font-tech bg-background w-full">
+                    {KNOWLEDGE_TRADES.map(t => <option key={t}>{t}</option>)}
+                  </select></div>
+                <div className="md:col-span-2"><label className="label-tech">Title</label>
+                  <input value={teach.title} onChange={e => setTeach({ ...teach, title: e.target.value })} placeholder="e.g. Valley leak that only shows in heavy rain — tray was too narrow" className="field-tech" /></div>
+                <div className="md:col-span-2"><label className="label-tech">The lesson — steps or the fix, written out in full</label>
+                  <textarea value={teach.body} onChange={e => setTeach({ ...teach, body: e.target.value })} rows={5} placeholder={"Write it the way you would tell an apprentice on site.\nOne step per line works best.\nInclude the measurements that matter."} className="field-tech" /></div>
+                <div className="md:col-span-2"><label className="label-tech">Tools (comma-separated)</label>
+                  <input value={teach.tools} onChange={e => setTeach({ ...teach, tools: e.target.value })} list="teach-tools" placeholder="Ladder, Sealant gun, Measuring tape" className="field-tech font-tech" />
+                  <datalist id="teach-tools">{STANDARD_TOOLS.map(t => <option key={t} value={t} />)}</datalist></div>
+                <div className="md:col-span-2"><Button className="rounded-none font-display uppercase h-11" onClick={() => void submitTeach()}>Submit for staff review</Button></div>
+              </div>
+              {!!myKnowledge.length && (
+                <div className="border hairline mt-4">
+                  {myKnowledge.map((e, i) => (
+                    <div key={e.id} className={`px-4 py-3 flex flex-wrap gap-3 items-center justify-between ${i > 0 ? "border-t hairline" : ""}`}>
+                      <p className="font-tech text-sm"><span className="text-primary">{e.title}</span> <span className="text-muted-foreground">· {e.trade} · {e.kind}</span>
+                        {e.status === "rejected" && e.rejectNote ? <span className="block text-[11px] text-red-400 mt-0.5">Staff note: {e.rejectNote}</span> : null}</p>
+                      <span className={`font-tech text-[10px] uppercase tracking-widest border px-2 py-0.5 ${e.status === "approved" ? "border-emerald-500/60 text-emerald-400" : e.status === "rejected" ? "border-red-500/50 text-red-400" : "hairline text-muted-foreground"}`}>
+                        {e.status === "approved" ? `Published${e.confirmations ? ` · ✓ ${e.confirmations} field confirmation${e.confirmations === 1 ? "" : "s"}` : ""}` : e.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             <section>
               <h3 className="font-display font-bold uppercase text-2xl mb-4">Grow — upgrades (current launch terms)</h3>

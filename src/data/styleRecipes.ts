@@ -8,7 +8,7 @@
 
 export type TradeId =
   | "roofing" | "tiling" | "woodwork" | "plumbing"
-  | "interior" | "windows-doors" | "exterior";
+  | "interior" | "windows-doors" | "exterior" | "interior-cabinetry";
 
 export interface TradeDef {
   id: TradeId; name: string; tagline: string;
@@ -23,6 +23,7 @@ export const TRADES: TradeDef[] = [
   { id: "interior", name: "Interior Room", tagline: "Paint, ceiling (POP / board / PVC) & floor finish", bookService: "consultation" },
   { id: "windows-doors", name: "Windows & Doors", tagline: "Casement, sliding & full-glaze openings, priced from catalog", bookService: "windows-doors-survey" },
   { id: "exterior", name: "Exterior & Cladding", tagline: "ACP facades, stone cladding, brick finish, painted render", bookService: "cladding-survey" },
+  { id: "interior-cabinetry", name: "Interior & Cabinetry", tagline: "Kitchens, wardrobes, TV consoles, wall panels & doors — boards priced from live Settings rates", bookService: "consultation" },
 ];
 
 export interface StyleDef {
@@ -64,6 +65,12 @@ export const STYLES: StyleDef[] = [
   { id: "int-modern", trade: "interior", name: "Modern Clean", desc: "Crisp whites & soft greys, flat ceiling lines, cool light.", preview: "interior-modern", accent: "#EDEEF0", accent2: "#6E7276", paintFamily: { label: "Whites & soft greys", colours: ["#F4F4F2", "#D9D9D6", "#A8ADB3", "#5B6066"] } },
   { id: "int-classic", trade: "interior", name: "Classic Warm", desc: "Creams, terracotta warmth and a traditional cornice line.", preview: "interior-classic", accent: "#E8E0CC", accent2: "#A9603C", paintFamily: { label: "Creams & terracotta", colours: ["#F1E8D2", "#E3CFA5", "#C89B6A", "#A9603C"] } },
   { id: "int-minimal", trade: "interior", name: "Warm Minimal", desc: "Warm off-whites and greige — calm, uncluttered, gallery-like.", preview: "interior-minimal", accent: "#E5DED2", accent2: "#8A7B63", paintFamily: { label: "Warm off-white & greige", colours: ["#EFEAE0", "#DDD3C0", "#B4A88F", "#8A7B63"] } },
+  // ---- Interior & Cabinetry (boards priced LIVE from Settings & Rates via rateKey) ----
+  { id: "cab-kitchen", trade: "interior-cabinetry", name: "Kitchen Cabinets", desc: "Base + wall cabinets per linear metre — HDF carcasses, marine ply at the sink, labour per metre from Settings.", preview: "kitchen", accent: "#2B2F33" },
+  { id: "cab-wardrobe", trade: "interior-cabinetry", name: "Wardrobe", desc: "Carcass + doors per m² of frontage — hanging rails, shelves, soft-close hardware.", preview: "shaker", accent: "#4A3428" },
+  { id: "cab-tv", trade: "interior-cabinetry", name: "TV Console & Media Wall", desc: "MDF console + panelled media wall with LED detail, per metre of run.", preview: "shelving", accent: "#274B63" },
+  { id: "cab-panels", trade: "interior-cabinetry", name: "Wall Panels / Wainscoting", desc: "MDF wall panelling per m² — battens, boards, adhesive and paint finish.", preview: "interior-modern", accent: "#EDEEF0", accent2: "#6E7276" },
+  { id: "cab-door", trade: "interior-cabinetry", name: "Interior Door", desc: "Blockboard-core door leaf, frame, hinges and lock set — priced per door.", preview: "louvre", accent: "#A9603C" },
   // ---- Windows & Doors ----
   { id: "win-casement", trade: "windows-doors", name: "Casement Classic", desc: "Hinged casement windows, fabricated to measure. Catalog-priced per m².", preview: "casement", accent: "#2B2F33", winKind: "casement" },
   { id: "win-sliding", trade: "windows-doors", name: "Sliding Modern", desc: "Wide sliding windows & doors on smooth double tracks.", preview: "sliding", accent: "#274B63", winKind: "sliding" },
@@ -110,6 +117,9 @@ export interface RecipeLine {
   wasteApplies?: boolean;
   catalogSlug?: string;
   estimatorPriceNgn?: number;
+  /** Key into Settings & Rates (getRates) — the LIVE rate is the unit price
+   *  (Boards & Panels sheets + cabinet labour). Wins over estimatorPriceNgn. */
+  rateKey?: string;
   note?: string;
 }
 
@@ -291,3 +301,57 @@ export const EXTERIOR_RECIPES: Record<string, RecipeLine[]> = {
 };
 /** Exterior cutting/breakage waste for stone & brick finishes. */
 export const EXTERIOR_WASTE = 10;
+
+/** Interior & Cabinetry recipes. Board lines carry a `rateKey` into
+ *  Settings & Rates (getRates): the board/labour price is the LIVE admin
+ *  rate — the same value the Boards & Panels shop products sell at.
+ *  Board sheet = 1.22 × 2.44m = 2.98m² (boardArea). Kitchen basis:
+ *  per linear metre of run — boards from run length × unit height ×
+ *  carcass factor; doors at 1 front per 0.55–0.6m; hinges 2/door;
+ *  handles 1/door. Hardware (hinges/handles/runners) uses labelled
+ *  estimator rates — no catalog hardware products exist yet. */
+export const CABINETRY_RECIPES: Record<string, RecipeLine[]> = {
+  "cab-kitchen": [
+    { name: "HDF boards 18mm — carcass + doors (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.9, perKey: "boardArea", rounding: "ceil", rateKey: "hdfSheet", note: "Run × height × 1.9 carcass factor (base + wall units) — live Boards rate from Settings" },
+    { name: "Marine plywood 18mm — sink/wet-zone unit (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "frontage", rate: 0.3, rounding: "ceil", rateKey: "marinePlywoodSheet", note: "≈1 sheet per 3m of run for the sink carcass (900mm wet zone) — live Boards rate from Settings" },
+    { name: "Hinges (soft-close)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door — estimator rate" },
+    { name: "Handles / bar pulls", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door/drawer front — estimator rate" },
+    { name: "Drawer runners (pair)", group: "Accessories & Fixings", unit: "pair", driver: "frontage", rate: 0.67, rounding: "ceil", estimatorPriceNgn: 4500, note: "≈2 drawer banks per 3m run — estimator rate" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "≈1 roll per 3m of run — estimator rate" },
+    { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
+    { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of kitchen run — live rate from Settings & Rates" },
+  ],
+  "cab-wardrobe": [
+    { name: "HDF boards 18mm — carcass + doors (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.6, perKey: "boardArea", rounding: "ceil", rateKey: "hdfSheet", note: "Frontage area (run × height) × 1.6 carcass factor — live Boards rate from Settings" },
+    { name: "Hanging rail (chrome tube)", group: "Main Materials", unit: "m", driver: "frontage", rate: 1, rounding: "round1", estimatorPriceNgn: 2800, note: "Per metre of hanging run — estimator rate" },
+    { name: "Hinges (soft-close) — hinged doors", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door; sliding-door designs use a track kit instead — estimator rate" },
+    { name: "Handles / knobs", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door — estimator rate" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
+    { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of wardrobe run — live rate from Settings & Rates" },
+  ],
+  "cab-tv": [
+    { name: "MDF boards 18mm — console + panels (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.3, perKey: "boardArea", rounding: "ceil", rateKey: "mdfSheet", note: "Frontage area × 1.3 (console + panelling) — live Boards rate from Settings" },
+    { name: "LED strip light (5m roll)", group: "Main Materials", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 9500, note: "Feature lighting — estimator rate" },
+    { name: "Shelf brackets / concealed pins", group: "Accessories & Fixings", unit: "pc", driver: "frontage", rate: 2, rounding: "ceil", estimatorPriceNgn: 1500, note: "2 per metre — estimator rate" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Screws & wall plugs (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
+    { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of unit run — live rate from Settings & Rates" },
+  ],
+  "cab-panels": [
+    { name: "MDF boards 18mm — wall panels (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.05, perKey: "boardArea", rounding: "ceil", rateKey: "mdfSheet", note: "Wall area × 1.05 cutting allowance ÷ 2.98m² per sheet — live Boards rate from Settings" },
+    { name: "Batten timber for panelling grounds", group: "Main Materials", unit: "m", driver: "area", rate: 1.2, rounding: "round1", estimatorPriceNgn: 900, note: "≈1.2m of batten per m² of panelled wall — estimator rate" },
+    { name: "Panel adhesive & filler (allowance)", group: "Consumables", unit: "lot", driver: "area", rate: 0.1, rounding: "ceil", estimatorPriceNgn: 12000, note: "≈1 lot per 10m² — estimator rate" },
+    { name: "Finishing paint / varnish", group: "Consumables", unit: "L", driver: "area", rate: 0.25, rounding: "round1", estimatorPriceNgn: 7500, note: "≈0.25L per m², 2 coats — estimator rate" },
+    { name: "Panelling labour", group: "Labour", unit: "m²", driver: "area", rate: 1, rounding: "round1", estimatorPriceNgn: 3500, note: "Per m² of panelled wall — estimator rate" },
+  ],
+  "cab-door": [
+    { name: "Blockboard 18mm — door leaves (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "doors", rate: 0.8, rounding: "ceil", rateKey: "blockboardSheet", note: "≈0.8 sheet per standard leaf, offcuts to linings — live Boards rate from Settings" },
+    { name: "Door frame timber (set)", group: "Main Materials", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 15000, note: "Per door opening — estimator rate" },
+    { name: "Butt hinges (heavy)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 3, rounding: "ceil", estimatorPriceNgn: 1800, note: "3 per door — estimator rate" },
+    { name: "Door handles + lock set", group: "Accessories & Fixings", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 12500, note: "Per door — estimator rate" },
+    { name: "Screws, nails & glue (allowance)", group: "Consumables", unit: "lot", driver: "doors", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Finishing — varnish / paint", group: "Consumables", unit: "L", driver: "doors", rate: 0.5, rounding: "round1", estimatorPriceNgn: 7500, note: "≈0.5L per door, 2 coats — estimator rate" },
+    { name: "Carpentry labour (doors)", group: "Labour", unit: "door", driver: "doors", rate: 1, rounding: "exact", estimatorPriceNgn: 25000, note: "Make + hang per door — estimator rate" },
+  ],
+};

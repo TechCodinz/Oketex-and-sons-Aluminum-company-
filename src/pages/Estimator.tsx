@@ -29,6 +29,7 @@ import AiAssistPanel from "@/components/AiAssistPanel";
 const TRADE_ICONS: Record<TradeId, typeof Hammer> = {
   roofing: Hammer, tiling: LayoutGrid, woodwork: Ruler, plumbing: Bath,
   interior: PaintRoller, "windows-doors": AppWindow, exterior: Building2,
+  "interior-cabinetry": ClipboardList,
 };
 
 // ---------------- SVG pattern previews for the style library -------------------
@@ -180,7 +181,7 @@ export default function Estimator() {
   };
   function createWorkspaceProject() {
     const code = savedCode ?? estimateCode();
-    const tradeMap: Record<TradeId, ProProject["trade"]> = { roofing: "Roofer", woodwork: "Carpenter", tiling: "Builder", plumbing: "Builder", interior: "Builder", "windows-doors": "Builder", exterior: "Builder" };
+    const tradeMap: Record<TradeId, ProProject["trade"]> = { roofing: "Roofer", woodwork: "Carpenter", tiling: "Builder", plumbing: "Builder", interior: "Builder", "windows-doors": "Builder", exterior: "Builder", "interior-cabinetry": "Carpenter" };
     const measures: MeasureRow[] = allLines.map(l => ({
       id: uid(), item: l.name, location: style?.name ?? "", l: 0, w: 0, h: 0,
       qty: typeof l.qty === "number" ? l.qty : 0, unit: l.unit,
@@ -324,13 +325,13 @@ export default function Estimator() {
             <p className="font-tech text-xs text-muted-foreground">Pattern: <span className="text-primary">{style?.name}</span> — waste {TILING_WASTE[styleId] ?? 10}% is added to the tile count. Floor area: {(input.length * input.width).toFixed(1)} m².</p>
           </div>)}
 
-          {trade === "woodwork" && (<div className="space-y-7">
+          {(trade === "woodwork" || trade === "interior-cabinetry") && (<div className="space-y-7">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <Num label={styleId === "wood-louvre" ? "Total door frontage width (m)" : "Run / frontage width (m)"} value={input.width} set={v => set({ width: v })} hint={styleId === "wood-kitchen" ? "Length of the kitchen run" : styleId === "wood-shaker" ? "Total wardrobe width" : undefined} />
-              <Num label="Height (m)" value={input.height} set={v => set({ height: v })} hint={styleId === "wood-kitchen" ? "Base + wall unit height ≈ 2.1–2.4m" : undefined} />
-              <Num label={styleId === "wood-louvre" ? "Number of doors" : "Doors/fronts override (0 = auto)"} value={input.unitCount} set={v => set({ unitCount: v })} step="1" hint={styleId === "wood-louvre" ? "Each door gets boards, frame, hinges & locks" : styleId === "wood-kitchen" ? "Auto: 1 front per 0.55m" : "Auto: 1 door per 0.6m"} />
+              <Num label={styleId === "wood-louvre" || styleId === "cab-door" ? "Total door frontage width (m)" : "Run / frontage width (m)"} value={input.width} set={v => set({ width: v })} hint={styleId === "wood-kitchen" || styleId === "cab-kitchen" ? "Length of the kitchen run" : styleId === "wood-shaker" || styleId === "cab-wardrobe" ? "Total wardrobe width" : undefined} />
+              <Num label="Height (m)" value={input.height} set={v => set({ height: v })} hint={styleId === "wood-kitchen" || styleId === "cab-kitchen" ? "Base + wall unit height ≈ 2.1–2.4m" : undefined} />
+              <Num label={styleId === "wood-louvre" || styleId === "cab-door" ? "Number of doors" : "Doors/fronts override (0 = auto)"} value={input.unitCount} set={v => set({ unitCount: v })} step="1" hint={styleId === "wood-louvre" || styleId === "cab-door" ? "Each door gets boards, frame, hinges & locks" : styleId === "wood-kitchen" || styleId === "cab-kitchen" ? "Auto: 1 front per 0.55m" : "Auto: 1 door per 0.6m"} />
             </div>
-            <p className="font-tech text-xs text-muted-foreground">Boards are costed from the frontage area (width × height) with the carcass factor for this style.</p>
+            <p className="font-tech text-xs text-muted-foreground">{trade === "interior-cabinetry" ? "Boards are priced at the LIVE Boards & Panels rates (Admin → Settings & Rates) — the same prices as the shop. Boards are costed from the frontage area (width × height) with the carcass factor for this style." : "Boards are costed from the frontage area (width × height) with the carcass factor for this style."}</p>
           </div>)}
 
           {trade === "plumbing" && (<div className="space-y-7">

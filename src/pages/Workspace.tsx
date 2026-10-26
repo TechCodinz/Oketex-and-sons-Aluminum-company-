@@ -12,6 +12,7 @@ import PlanGate, { PlanChip } from "@/components/PlanGate";
 import InstallCard from "@/components/InstallCard";
 import { useEntitlements, FREE_PROJECT_LIMIT } from "@/lib/plans";
 import { calculateRoof, PROFILES, type RoofResult } from "@/lib/roofEngine";
+import { ROOF_PATTERNS } from "@/data/roofPatterns";
 import {
   getProProjects, saveProProjects, uid, emptyTakeOffRow, emptyMeasureRow, defaultChecklist,
   type ProProject, type TakeOffRow,
@@ -110,6 +111,11 @@ export default function Workspace() {
   <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 flex flex-wrap gap-3 items-center no-print">
     <Link to="/documents" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary">Pro Documents — notes, quotes, contracts & invoices</Link>
     <Link to="/roofing-guide" className="inline-flex items-center gap-2 border border-foreground/40 font-display font-semibold uppercase tracking-wider px-4 h-10 hover:border-primary hover:text-primary">Roofing Guide — styles & measurements</Link>
+    <Link to="/pro-guide" className="inline-flex items-center gap-2 border border-primary/70 text-primary font-display font-semibold uppercase tracking-wider px-4 h-10 hover:bg-primary hover:text-primary-foreground">Forgot a pattern? Ask the Pro Guide</Link>
+    <select aria-label="Open a pattern in the Pro Guide" defaultValue="" onChange={e => { if (e.target.value) navigate(`/pro-guide?pattern=${e.target.value}`); }} className="field-tech font-tech bg-background h-10 w-auto cursor-pointer">
+      <option value="" disabled>Pattern quick-pick…</option>
+      {ROOF_PATTERNS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+    </select>
     <span className="ml-auto"><PlanChip /></span>
   </div>
   <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 no-print"><InstallCard /></div>

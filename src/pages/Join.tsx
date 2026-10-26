@@ -89,7 +89,7 @@ export default function Join() {
   }
 
   return (<div>
-    <PageHead kicker="Partner Network — Register" title="Join as a Pro, Seller — or Both" lead="Register free. The network runs BOTH directions through the Oketex office: pros and engineers get jobs assigned to them (leads, job-board wins, Snap & Send dispatches); sellers receive customer orders — and can also supply Oketex itself when the factory raises a Supply Request. Oketex approves every listing and tracks every deal." />
+    <PageHead kicker="Partner Network — Register" title="Join as a Pro, Seller — or Both" lead="We cover all building material construction business — if your trade builds, fixes or supplies buildings, there is a place for you here. Register free. The network runs BOTH directions through the Oketex office: pros and engineers get jobs assigned to them (leads, job-board wins, Snap & Send dispatches); sellers receive customer orders — and can also supply Oketex itself when the factory raises a Supply Request. Oketex approves every listing and tracks every deal." />
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 grid lg:grid-cols-[1fr_380px] gap-10">
       <div className="space-y-8">
         <div>

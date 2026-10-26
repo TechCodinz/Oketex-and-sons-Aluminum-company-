@@ -78,7 +78,7 @@ check(`statements applied == SCHEMA_STATEMENTS (${api.SCHEMA_STATEMENTS.length})
 // limitation), so instead of a second setup call we assert the outcome a
 // re-run must preserve: all 9 tables exist and stay writable.
 const tbl = await api.dbQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-check("all 17 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests","activity_log","production_jobs","supply_requests"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
+check("all 18 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests","activity_log","production_jobs","supply_requests","knowledge_entries"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
 
 // ---------- 2. Health ----------
 console.log("\n[2] GET /api/health");
@@ -424,6 +424,44 @@ r = await call(api.supply, { method: "PATCH", headers: { cookie: adminCookie }, 
 check("admin approves A — chosen total ₦500,000 recorded", r.status === 200 && r.json?.request?.status === "Approved" && r.json?.request?.chosenPartnerCode === "PRT-2026-SELLA" && r.json?.request?.chosenTotalNgn === 500000, `got ${r.status}: ${r.raw.slice(0, 200)}`);
 r = await call(api.supply, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "SUP-2026-SMOKE", action: "received" } });
 check("admin marks Received", r.status === 200 && r.json?.request?.status === "Received", `got ${r.status}`);
+
+// ---------- 20. Living knowledge — Teach the system (2026-10-26) ----------
+console.log("\n[20] Knowledge — partner submits → pending hidden → staff approves → public → confirm once → reject path");
+r = await call(api.knowledge, { method: "POST", body: { kind: "fix", trade: "Roofing", title: "Customer attempt", body: "Customers should not be able to teach the system at all.", tools: [], partnerCode: "PRT-NOPE", phone: "08000000000" } });
+check("customer (unknown partner) cannot contribute (404)", r.status === 404, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+r = await call(api.knowledge, { method: "POST", body: { kind: "fix", trade: "Roofing", title: "Wrong phone", body: "A real fix body that is long enough to pass validation.", tools: [], partnerCode: "PRT-2026-SMOKE", phone: "08039998888" } });
+check("partner with WRONG phone cannot contribute (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.knowledge, { method: "POST", body: { kind: "fix", trade: "Astrology", title: "Bad trade", body: "A real fix body that is long enough to pass validation.", tools: [], partnerCode: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("unknown trade rejected (400)", r.status === 400, `got ${r.status}`);
+r = await call(api.knowledge, { method: "POST", body: { kind: "fix", trade: "Interior & Cabinetry", title: "Swollen sink-unit edge — the marine ply fix", body: "Cut back to sound board, replace the sink carcass base with marine plywood, seal every cut edge twice and fix the leak source first.", tools: ["Drill machine"], partnerCode: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("approved partner submits (Interior & Cabinetry trade) -> 201 pending", r.status === 201 && r.json?.entry?.status === "pending" && r.json?.entry?.trade === "Interior & Cabinetry", `got ${r.status}: ${r.raw.slice(0, 200)}`);
+const knwId = r.json?.entry?.id;
+r = await call(api.knowledge, { method: "GET" });
+check("pending entry is NOT in the public list", !(r.json?.entries || []).some(e => e.id === knwId), r.raw.slice(0, 140));
+r = await call(api.knowledge, { method: "GET", query: { mine: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("partner sees their own pending submission via ?mine", (r.json?.entries || []).some(e => e.id === knwId && e.status === "pending"), r.raw.slice(0, 140));
+r = await call(api.knowledge, { method: "PATCH", headers: { cookie: loginCookie }, body: { id: knwId, action: "approve" } });
+check("non-staff cannot approve (401/403)", r.status === 401 || r.status === 403, `got ${r.status}`);
+r = await call(api.knowledge, { method: "PATCH", headers: { cookie: adminCookie }, body: { id: knwId, action: "approve" } });
+check("staff approves -> status approved", r.status === 200 && r.json?.entry?.status === "approved", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.knowledge, { method: "GET" });
+check("approved entry IS in the public list", (r.json?.entries || []).some(e => e.id === knwId), r.raw.slice(0, 140));
+check("public shape hides confirmedBy internals", (r.json?.entries || []).find(e => e.id === knwId)?.confirmedBy === undefined);
+r = await call(api.knowledge, { method: "PATCH", body: { id: knwId, action: "confirm", partnerCode: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("first confirmation counts (1)", r.status === 200 && r.json?.entry?.confirmations === 1 && r.json?.alreadyConfirmed === false, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.knowledge, { method: "PATCH", body: { id: knwId, action: "confirm", partnerCode: "PRT-2026-SMOKE", phone: "08031112222" } });
+check("second confirmation from same partner is a no-op", r.status === 200 && r.json?.entry?.confirmations === 1 && r.json?.alreadyConfirmed === true, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.knowledge, { method: "PATCH", body: { id: "longspan", action: "confirm", partnerCode: "PRT-2026-SMOKE", phone: "08031112222", seedTitle: "Aluminium Longspan", seedTrade: "Roofing" } });
+check("seed confirmation upserts a seedref pointer (count 1)", r.status === 200 && r.json?.entry?.kind === "seedref" && r.json?.entry?.confirmations === 1, `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.knowledge, { method: "POST", headers: { cookie: adminCookie }, body: { kind: "tip", trade: "Tiling", title: "Staff tip to be rejected", body: "A staff-submitted tip long enough to pass validation, destined for rejection.", tools: [] } });
+check("staff can submit directly (source staff)", r.status === 201 && r.json?.entry?.source === "staff", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+const staffTipId = r.json?.entry?.id;
+r = await call(api.knowledge, { method: "PATCH", headers: { cookie: adminCookie }, body: { id: staffTipId, action: "reject", note: "Not field-proven — rewrite with measurements" } });
+check("staff rejects with a note", r.status === 200 && r.json?.entry?.status === "rejected", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.knowledge, { method: "GET" });
+check("rejected entry never reaches the public list", !(r.json?.entries || []).some(e => e.id === staffTipId), r.raw.slice(0, 140));
+r = await call(api.knowledge, { method: "GET", query: { all: "1" }, headers: { cookie: adminCookie } });
+check("staff ?all=1 sees every status incl. the rejection", (r.json?.entries || []).some(e => e.id === staffTipId && e.status === "rejected" && (e.rejectNote || "").includes("field-proven")), r.raw.slice(0, 200));
 
 console.log(`\nSMOKE RESULT: ${pass} passed, ${fail} failed${fail ? " — failures: " + failures.join("; ") : ""}`);
 process.exit(fail ? 1 : 0);
