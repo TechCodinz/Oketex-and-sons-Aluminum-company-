@@ -14,6 +14,7 @@ export function ProductCard({ product }: { product: Product }) {
         {product.image && <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />}
         {product.stock <= 0 && <span className="absolute top-3 left-3 bg-destructive text-destructive-foreground font-tech text-[10px] uppercase tracking-widest px-2 py-1">Out of stock</span>}
         {product.featured && product.stock > 0 && <span className="absolute top-3 left-3 bg-primary text-primary-foreground font-tech text-[10px] uppercase tracking-widest px-2 py-1">Best seller</span>}
+        {product.hardToFind && <span className="absolute top-3 right-3 bg-foreground text-background font-tech text-[10px] uppercase tracking-widest px-2 py-1">Hard to Find</span>}
       </Link>
       <div className="p-4 flex flex-col flex-1">
         <Link to={`/product/${product.slug}`} className="hover:text-primary transition-colors"><h3 className="font-display font-semibold text-lg leading-tight">{product.name}</h3></Link>

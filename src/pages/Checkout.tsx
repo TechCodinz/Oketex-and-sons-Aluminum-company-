@@ -6,6 +6,7 @@ import { formatNGN } from "@/lib/money";
 import { PageHead } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { saveOrderAsync, orderCode } from "@/lib/storage";
+import { catalogue, productCost } from "@/data/catalog";
 import { paymentsApi } from "@/lib/api";
 import { CreditCard } from "lucide-react";
 import { BUSINESS } from "@/contracts/constants";
@@ -40,7 +41,7 @@ export default function Checkout(){
   if(payNow && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return toast.error("Add a valid email — Paystack sends your receipt there.");
   setPlacing(true);
   const code=orderCode();
-  const items=lines.map(l=>({name:l.name,unit:l.unit,unitPriceNgn:l.priceNgn,quantity:l.quantity,lineTotalNgn:l.priceNgn*l.quantity}));
+  const cat=catalogue(); const items=lines.map(l=>{ const p=cat.find(x=>x.slug===l.slug); return {name:l.name,unit:l.unit,unitPriceNgn:l.priceNgn,quantity:l.quantity,lineTotalNgn:l.priceNgn*l.quantity,...(p?{costPriceNgn:productCost(p),categorySlug:p.categorySlug}:{})}; });
   const wa=`Hello ${BUSINESS.name}, my order ${code} totals ${formatNGN(grandTotal)} (${lines.map(l=>`${l.quantity}× ${l.name}`).join(", ")})${discountNgn>0&&check?.ok?` — includes coupon ${check.coupon.code} discount of ${formatNGN(discountNgn)} on a ${formatNGN(totalNgn)} subtotal`:""}${deliveryNgn>0?` — includes delivery (${zoneLabel(zoneId)}) ${formatNGN(deliveryNgn)}`:" — pickup from Ibafo"}${dispatchNgn>0?` and dispatch & handling ${formatNGN(dispatchNgn)}`:""}. Name: ${f.name}, Address: ${f.address}. Please confirm.`;
   await saveOrderAsync({code,name:f.name,phone:f.phone,email:f.email,address:f.address,note:f.note,items,totalNgn:grandTotal,...(discountNgn>0&&check?.ok?{subtotalNgn:totalNgn,couponCode:check.coupon.code,discountNgn}:{}),deliveryZoneId:zoneId,deliveryNgn,...(dispatchNgn>0?{dispatchNgn}:{}),status:"pending",createdAt:new Date().toISOString()});
   notify({templateKey:"order_placed",audience:"admin",refCode:code,vars:{name:f.name,phone:f.phone,amount:formatNGN(grandTotal)}});

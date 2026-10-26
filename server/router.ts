@@ -28,6 +28,7 @@ import jobsBid from "./handlers/jobs/bid.js";
 import jobsAward from "./handlers/jobs/award.js";
 import reviews from "./handlers/reviews.js";
 import snapRequests from "./handlers/snap-requests.js";
+import sourceRequests from "./handlers/source-requests.js";
 import snapAssess from "./handlers/snap-requests/assess.js";
 import snapAssign from "./handlers/snap-requests/assign.js";
 import notifications from "./handlers/notifications.js";
@@ -62,6 +63,7 @@ const exact: Record<string, any> = {
   "/api/jobs/award": jobsAward,
   "/api/reviews": reviews,
   "/api/snap-requests": snapRequests,
+  "/api/source-requests": sourceRequests,
   "/api/snap-requests/assess": snapAssess,
   "/api/snap-requests/assign": snapAssign,
   "/api/notifications": notifications,

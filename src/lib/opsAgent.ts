@@ -12,6 +12,8 @@ import { partnerAvailable, type Partner, type Lead } from "./partnerStorage";
 import { lowStockFlags, type StockDoc, type CoilStock } from "./stock";
 import { formatNGN } from "./money";
 import { knowledgeBriefing, type KnowledgeEntry } from "./knowledge";
+import { marginPct, realizedProfit } from "./profit";
+import { aggregateDemand, type SourceRequest } from "./sourceRequests";
 import type { LocalOrder, LocalQuote } from "./storage";
 import type { LocalBooking } from "./proStorage";
 import type { SnapRequest } from "./snapRequests";
@@ -28,6 +30,11 @@ export interface OpsData {
   stock: StockDoc; staffPhones?: { name: string; phone: string }[];
   supplyRequests?: SupplyRequest[];
   knowledgeEntries?: KnowledgeEntry[];
+  /** Profit Intelligence (2026-10-26): effective price/cost rows for the
+   *  whole catalogue + the admin target margin. */
+  profit?: { rows: { price: number; cost: number | null }[]; targetMarginPct: number };
+  /** Source-Anything queue for the sourcing tile. */
+  sourceRequests?: SourceRequest[];
 }
 
 const HOUR = 3600_000;
@@ -45,6 +52,12 @@ export interface OpsBriefing {
   production: { queuedStale: ProductionJob[]; qcFailuresToday: number; lowStock: CoilStock[]; bundledStale: ProductionJob[] };
   supply: { awaitingQuotesStale: SupplyRequest[]; approvedOverdue: SupplyRequest[] };
   knowledge: { pendingReview: number; topFixThisWeek: { title: string; confirmations: number } | null };
+  /** Profit tile: products priced below the target margin + the biggest
+   *  realized-profit category from order cost snapshots (null = no
+   *  costed orders yet — the honest state, never a fabricated number). */
+  profit: { belowTargetCount: number; topRealizedCategory: string | null; hasCostedOrders: boolean };
+  /** Sourcing tile: unquoted Source-Anything requests + top demanded keyword. */
+  sourcing: { unquoted: number; topKeyword: string | null };
 }
 export function buildBriefing(data: OpsData, now: Date = new Date()): OpsBriefing {
   const newToday = [
@@ -81,6 +94,7 @@ export function buildBriefing(data: OpsData, now: Date = new Date()): OpsBriefin
     orders: data.orders, quotes: data.quotes, bookings: data.bookings,
     verifyRequests: data.verifyRequests, partners: data.partners,
     jobs: data.jobs, snapRequests: data.snapRequests, leads: data.leads,
+    sourceRequests: data.sourceRequests,
   });
   const production = {
     queuedStale: data.productionJobs.filter(j => j.status === "Queued" && ageHours(j.updatedAt || j.createdAt, now) > 24),
@@ -94,7 +108,18 @@ export function buildBriefing(data: OpsData, now: Date = new Date()): OpsBriefin
     approvedOverdue: supplyReqs.filter(r => r.status === "Approved" && !!r.neededBy && r.neededBy < now.toISOString().slice(0, 10)),
   };
   const knowledge = knowledgeBriefing(data.knowledgeEntries || [], now);
-  return { newToday, stuck, money, pending, production, supply, knowledge };
+  const profitRows = data.profit?.rows || [];
+  const target = data.profit?.targetMarginPct ?? 25;
+  const realized = realizedProfit(data.orders || []);
+  const profit = {
+    belowTargetCount: profitRows.filter(r => r.cost != null && r.cost > 0 && marginPct(r.price, r.cost) < target).length,
+    topRealizedCategory: realized.perCategory[0]?.categorySlug ?? null,
+    hasCostedOrders: realized.costedLines > 0,
+  };
+  const srcReqs = data.sourceRequests || [];
+  const demand = aggregateDemand(srcReqs);
+  const sourcing = { unquoted: srcReqs.filter(r => r.status === "Received").length, topKeyword: demand[0]?.keyword ?? null };
+  return { newToday, stuck, money, pending, production, supply, knowledge, profit, sourcing };
 }
 
 // ---------------- Chasers ----------------
@@ -207,6 +232,8 @@ export function draftAssessment(
   if (/leak|drip/.test(text)) {
     items.push({ name: "Leak repair — sealant, flashing & fixings (confirm scope on site)", qty: 1, unitPrice: 0, matched: false, note: "No catalogue line for leak sealing — price it after inspection" });
     flags.push("Leak reported — the sealant/flashing line is unpriced on purpose; a human prices it after inspection.");
+    const sil = findProduct("silicone sealant");
+    if (sil) pushMatched(sil, 1, "Silicone sealant stocked — confirm cartridge count on site");
   }
   if (/rust|corrod/.test(text) || (/replace/.test(text) && /sheet/.test(text)) || /\bsheet/.test(text)) {
     const s = findProduct("longspan") || findProduct("sheet");
@@ -219,6 +246,37 @@ export function draftAssessment(
   if (/window/.test(text)) { const w = findProduct("window"); if (w) pushMatched(w, 1, "Window mentioned — confirm size and count"); }
   if (/insulation|foil/.test(text)) { const f = findProduct("insulation"); if (f) pushMatched(f, 1, "Insulation mentioned — confirm roll count"); }
   if (/screw|fastener|nail/.test(text)) { const f = findProduct("fastener"); if (f) pushMatched(f, 1, "Fasteners mentioned — confirm bucket count"); }
+  // ---- Store Stock-Up categories (2026-10-26): the drafter prices the
+  // new shelves from the same catalogue — every rule no-ops when the
+  // product is not in the passed catalogue.
+  if (/ridge/.test(text)) { const r = findProduct("ridge cap"); if (r) pushMatched(r, metresInText ?? 1, "Ridge cap mentioned — confirm metres on site"); }
+  if (/sealant|silicone/.test(text)) { const s = findProduct("silicone sealant"); if (s) pushMatched(s, 1, "Sealant mentioned — confirm cartridge count"); }
+  if (/til(e|es|ing)\b/.test(text) && !/roof/.test(text)) {
+    const t = findProduct("ceramic floor tiles") || findProduct("porcelain");
+    if (t) pushMatched(t, 1, "Tiling mentioned — confirm tile area and carton count");
+    const a = findProduct("tile adhesive");
+    if (a) pushMatched(a, 1, "Tile adhesive (gum cement) — roughly 1 bag per 4–5m²");
+  }
+  if (/grout/.test(text)) { const g = findProduct("tile grout"); if (g) pushMatched(g, 1, "Grout mentioned — confirm bag count"); }
+  if (/paint|repaint/.test(text)) { const p = findProduct("emulsion paint"); if (p) pushMatched(p, 1, "Painting mentioned — emulsion priced; confirm drums and colour"); }
+  if (/\bpop\b/.test(text)) { const p = findProduct("pop cement"); if (p) pushMatched(p, 1, "POP work mentioned — confirm bag count"); }
+  if (/screed/.test(text)) { const p = findProduct("screeding putty"); if (p) pushMatched(p, 1, "Screeding mentioned — confirm bag count"); }
+  if (/cement|blockwork|foundation|slab|concrete/.test(text)) { const c = findProduct("portland cement"); if (c) pushMatched(c, 1, "Cement mentioned — confirm bag count (day price on order)"); }
+  if (/rod|rebar|reinforcement/.test(text)) { const r = findProduct("reinforcement rod 12mm"); if (r) pushMatched(r, 1, "Reinforcement mentioned — 12mm priced; confirm sizes and lengths from the drawing"); }
+  if (/binding wire/.test(text)) { const w = findProduct("binding wire"); if (w) pushMatched(w, 1, "Binding wire mentioned — confirm rolls"); }
+  if (/\bwc\b|toilet|water closet/.test(text)) { const w = findProduct("water closet"); if (w) pushMatched(w, 1, "WC mentioned — confirm rough-in (wall/floor outlet)"); }
+  if (/basin/.test(text)) { const b = findProduct("wash hand basin"); if (b) pushMatched(b, 1, "Basin mentioned — confirm count"); }
+  if (/tank|water storage/.test(text)) { const t = findProduct("water tank"); if (t) pushMatched(t, 1, "Water tank mentioned — confirm capacity"); }
+  if (/heater|hot water/.test(text)) { const h = findProduct("water heater"); if (h) pushMatched(h, 1, "Water heater mentioned — confirm capacity"); }
+  if (/pipe|pvc|ppr/.test(text)) { const p = /drain|waste|soil/.test(text) ? findProduct("drainage pipe") : findProduct("pressure pipe"); if (p) pushMatched(p, 1, "Pipe mentioned — confirm lengths and fittings"); }
+  if (/tap|mixer/.test(text)) { const t = findProduct("basin mixer"); if (t) pushMatched(t, 1, "Tap mentioned — confirm count"); }
+  if (/cable|wiring/.test(text)) { const c = findProduct("copper cable 2.5mm"); if (c) pushMatched(c, 1, "Wiring mentioned — 2.5mm priced; confirm sizes (1.5mm lights / 4mm heavy loads) and coils"); }
+  if (/socket/.test(text)) { const s = findProduct("double socket"); if (s) pushMatched(s, 1, "Sockets mentioned — confirm point count"); }
+  if (/switch/.test(text)) { const s = findProduct("2-gang"); if (s) pushMatched(s, 1, "Switches mentioned — confirm count"); }
+  if (/\bfan\b/.test(text)) { const f = findProduct("ceiling fan"); if (f) pushMatched(f, 1, "Ceiling fan mentioned — confirm count"); }
+  if (/distribution board|\bdb\b/.test(text)) { const d = findProduct("distribution board"); if (d) pushMatched(d, 1, "Distribution board mentioned — confirm ways"); }
+  if (/lock/.test(text)) { const l = findProduct("mortise lock"); if (l) pushMatched(l, 1, "Lock mentioned — confirm door count"); }
+  if (/hinge/.test(text)) { const h = findProduct("soft-close cabinet hinges"); if (h) pushMatched(h, 1, "Hinges mentioned — confirm door count (sold per pair)"); }
   if (!items.length && input.intent !== "sell") flags.push("No catalogue match in the description — add the items manually.");
 
   const addr = (input.address || "").toLowerCase();

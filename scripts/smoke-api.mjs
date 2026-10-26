@@ -78,7 +78,7 @@ check(`statements applied == SCHEMA_STATEMENTS (${api.SCHEMA_STATEMENTS.length})
 // limitation), so instead of a second setup call we assert the outcome a
 // re-run must preserve: all 9 tables exist and stay writable.
 const tbl = await api.dbQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-check("all 18 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests","activity_log","production_jobs","supply_requests","knowledge_entries"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
+check("all 19 tables exist after setup", ["users","partners","leads","bookings","orders","quotes","payments","settings","offers","jobs","bids","reviews","notifications","snap_requests","activity_log","production_jobs","supply_requests","knowledge_entries","source_requests"].every(t => tbl.some(x => x.table_name === t)), tbl.map(x => x.table_name).join(","));
 
 // ---------- 2. Health ----------
 console.log("\n[2] GET /api/health");
@@ -462,6 +462,23 @@ r = await call(api.knowledge, { method: "GET" });
 check("rejected entry never reaches the public list", !(r.json?.entries || []).some(e => e.id === staffTipId), r.raw.slice(0, 140));
 r = await call(api.knowledge, { method: "GET", query: { all: "1" }, headers: { cookie: adminCookie } });
 check("staff ?all=1 sees every status incl. the rejection", (r.json?.entries || []).some(e => e.id === staffTipId && e.status === "rejected" && (e.rejectNote || "").includes("field-proven")), r.raw.slice(0, 200));
+
+// ---------- 21. Global Sourcing (SC) — create, quote privacy, approve ----------
+console.log("\n[21] Source requests — create, staff quote, customer sees landed total only, phone-proof approve");
+r = await call(api.sourceRequests, { method: "POST", body: { code: "SC-2026-SMOKE", productName: "Italian marble tiles 120x60", description: "Polished, for a duplex in Lekki", quantity: 20, area: "lagos-lekki-ajah", customerName: "Source Tester", customerPhone: "08031234567" } });
+check("source request created (201, Received)", r.status === 201 && r.json?.request?.status === "Received", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.sourceRequests, { method: "PATCH", body: { code: "SC-2026-SMOKE", action: "quote", quote: { itemNgn: 400000, shippingNgn: 150000, serviceNgn: 183500, costTotalNgn: 550000, leadDays: 21, note: "Air freight" } } });
+check("quote without staff rejected", r.status === 401 || r.status === 403, `got ${r.status}`);
+r = await call(api.sourceRequests, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "SC-2026-SMOKE", action: "quote", quote: { itemNgn: 400000, shippingNgn: 150000, serviceNgn: 183500, costTotalNgn: 550000, leadDays: 21, note: "Air freight" } } });
+check("staff quote → Quoted, server landed total ₦733,500", r.status === 200 && r.json?.request?.status === "Quoted" && r.json?.request?.landedTotalNgn === 733500, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+r = await call(api.sourceRequests, { method: "GET", query: { code: "SC-2026-SMOKE" } });
+check("public lookup hides phone AND the quote cost side", r.json?.request?.customerPhone === "" && r.json?.request?.quote?.costTotalNgn === undefined && r.json?.request?.landedTotalNgn === 733500, r.raw.slice(0, 240));
+r = await call(api.sourceRequests, { method: "PATCH", body: { code: "SC-2026-SMOKE", action: "approve", phone: "08099999999" } });
+check("approve with the wrong phone rejected (403)", r.status === 403, `got ${r.status}`);
+r = await call(api.sourceRequests, { method: "PATCH", body: { code: "SC-2026-SMOKE", action: "approve", phone: "08031234567" } });
+check("customer approves → Approved", r.status === 200 && r.json?.request?.status === "Approved", `got ${r.status}: ${r.raw.slice(0, 160)}`);
+r = await call(api.sourceRequests, { method: "GET", query: { all: "1" }, headers: { cookie: adminCookie } });
+check("staff queue lists the SC request", (r.json?.requests || []).some(x => x.code === "SC-2026-SMOKE" && x.quote?.costTotalNgn === 550000), r.raw.slice(0, 200));
 
 console.log(`\nSMOKE RESULT: ${pass} passed, ${fail} failed${fail ? " — failures: " + failures.join("; ") : ""}`);
 process.exit(fail ? 1 : 0);

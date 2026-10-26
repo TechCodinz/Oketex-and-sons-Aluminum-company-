@@ -18,6 +18,9 @@ import type { LocalBooking } from "@/lib/proStorage";
 import type { Partner, Lead } from "@/lib/partnerStorage";
 import type { SnapRequest } from "@/lib/snapRequests";
 import type { VerifyRequest } from "@/lib/assistantBrain";
+import { getSourceRequestsAdminAsync } from "@/lib/sourceRequests";
+import { catalogue, productPrice, productCost, categories } from "@/data/catalog";
+import { getProfitTargetMargin } from "@/lib/settings";
 
 interface Props {
   orders: LocalOrder[]; quotes: LocalQuote[]; bookings: LocalBooking[]; leads: Lead[];
@@ -31,19 +34,20 @@ interface Props {
 // drafts chaser messages — a human taps send. It never moves money, sets
 // prices or assigns work by itself.
 export default function OpsTab(props: Props) {
-  const [extra, setExtra] = useState<Pick<OpsData, "invoices" | "productionJobs" | "stock" | "staffPhones" | "supplyRequests"> | null>(null);
+  const [extra, setExtra] = useState<Pick<OpsData, "invoices" | "productionJobs" | "stock" | "staffPhones" | "supplyRequests" | "profit" | "sourceRequests"> | null>(null);
   const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
   const [teach, setTeach] = useState<{ kind: KnowledgeKind; trade: GuideTrade; title: string; body: string; tools: string }>({ kind: "tip", trade: "Roofing", title: "", body: "", tools: "" });
   const loadKnowledge = async () => setKnowledge(await listKnowledgeAllAsync());
   useEffect(() => {
     void (async () => {
-      const [productionJobs, staff, supplyRequests] = await Promise.all([getProductionJobsAsync(), getStaffAsync(), getSupplyRequestsAsync()]);
+      const [productionJobs, staff, supplyRequests, sourceRequests] = await Promise.all([getProductionJobsAsync(), getStaffAsync(), getSupplyRequestsAsync(), getSourceRequestsAdminAsync()]);
       setExtra({
         invoices: getDocuments().invoices, productionJobs,
         stock: getStockDoc(),
         staffPhones: staff.map(s => ({ name: s.name, phone: s.phone })),
-        supplyRequests,
+        supplyRequests, sourceRequests,
+        profit: { rows: catalogue().map(p => ({ price: productPrice(p), cost: productCost(p) })), targetMarginPct: getProfitTargetMargin() },
       });
       await loadKnowledge();
     })();
@@ -144,6 +148,16 @@ export default function OpsTab(props: Props) {
           </div>); })}
         </div>}
         <p className="font-tech text-[11px] text-muted-foreground mt-3">The agent never sends on its own — each chaser above goes out only when you tap. Sent chasers are recorded in the Activity log as agent drafts approved by you.</p>
+      </section>
+
+      <section>
+        <p className="label-tech mb-3">Profit &amp; sourcing — where the money leaks and what customers hunt for</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border hairline mb-5">
+          <button onClick={() => props.goTab("profit")} className="bg-background p-4 text-left cursor-pointer hover:bg-card"><div className="font-display font-bold text-2xl text-primary">{briefing.profit.belowTargetCount}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">Products below target margin → Profit</div></button>
+          <button onClick={() => props.goTab("profit")} className="bg-background p-4 text-left cursor-pointer hover:bg-card"><div className="font-display font-bold text-lg leading-snug">{briefing.profit.hasCostedOrders ? (categories.find(c => c.slug === briefing.profit.topRealizedCategory)?.name || briefing.profit.topRealizedCategory) : "No costed orders yet"}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">Biggest realized-profit category</div></button>
+          <button onClick={() => props.goTab("sourcing")} className="bg-background p-4 text-left cursor-pointer hover:bg-card"><div className="font-display font-bold text-2xl text-primary">{briefing.sourcing.unquoted}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">Sourcing requests awaiting a quote → Sourcing</div></button>
+          <button onClick={() => props.goTab("sourcing")} className="bg-background p-4 text-left cursor-pointer hover:bg-card"><div className="font-display font-bold text-lg leading-snug capitalize">{briefing.sourcing.topKeyword || "—"}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">Top demanded product (market survey)</div></button>
+        </div>
       </section>
 
       <section>

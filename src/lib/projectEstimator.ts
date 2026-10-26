@@ -322,7 +322,7 @@ function estimateInterior(input: EstimatorInput): EstimateResult {
   const assumptions = [
     `Wall area = perimeter × height − ${input.openingsPct}% for doors/windows.`,
     "Paint: emulsion at 11 m²/L per coat × 2 coats; primer at 12 m²/L, 1 coat — estimator rates.",
-    input.ceilingType === "pop" ? "POP: 1 × 25kg bag casts ≈2.5m²." : input.ceilingType === "plasterboard" ? "Plasterboard sheets are 1.2 × 2.4m (2.88m²)." : "PVC panels are 0.25 × 6m (1.5m² each).",
+    input.ceilingType === "pop" ? "POP: 1 × 40kg bag casts ≈4m²." : input.ceilingType === "plasterboard" ? "Plasterboard sheets are 1.2 × 2.4m (2.88m²)." : "PVC panels are 0.25 × 6m (1.5m² each).",
   ];
   const drivers: DriverStat[] = [
     { label: "Net wall area (paint)", value: m2(wallArea) },

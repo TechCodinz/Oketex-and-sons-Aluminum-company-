@@ -5,7 +5,7 @@ import { getOrders, getQuotes, getOrdersAsync, getQuotesAsync, type LocalOrder, 
 import { getBookings, getBookingsAsync, updateBookingStatusAsync, BOOKING_STATUSES, type BookingStatus, type LocalBooking } from "@/lib/proStorage";
 import { getPartners, getLeads, getOffers, getPartnersAdminAsync, updatePartnerAsync, getLeadsAsync, updateLeadStatusAsync, deleteLeadAsync, getOffersAsync, addOfferAsync, deleteOfferAsync, addLeadAsync, partnerAvailable, type Partner, type Lead, type Offer } from "@/lib/partnerStorage";
 import type { LeadStatus } from "@/data/partnerTerms";
-import { getPartnerTerms, getRates, getBusiness, saveSettingsAsync, resetSettingsAsync, fetchServerSettings, overrideSummary, DEFAULT_RATES, getCoupons, getPromoBanner, getPriceWatch, type Coupon, type PriceWatchMaterial } from "@/lib/settings";
+import { getPartnerTerms, getRates, getBusiness, saveSettingsAsync, resetSettingsAsync, fetchServerSettings, overrideSummary, DEFAULT_RATES, getCoupons, getPromoBanner, getPriceWatch, saveCatalogOverride, getFindsDrafts, saveFindsDrafts, getProfitTargetMargin, type Coupon, type PriceWatchMaterial } from "@/lib/settings";
 import { getJobsAdminAsync, getJobBidsAsync, updateJobStatusAsync, deleteJob, budgetLabel, type Job, type Bid } from "@/lib/jobs";
 import { getReviewsAdminAsync, setReviewStatusAsync, deleteReviewAsync, starsText, type Review } from "@/lib/reviews";
 import { getNotificationsAsync, markNotificationSentAsync, dispatchNotificationsAsync, notificationWaLink, notify, type NotificationRecord } from "@/lib/notify";
@@ -15,7 +15,7 @@ import { PRO_TRADES } from "@/data/partnerTerms";
 import { useApiLive, apiLiveSync } from "@/lib/api";
 import { login as authLogin, logout as authLogout, fetchMe } from "@/lib/auth";
 import { DELIVERY_ZONES } from "@/lib/roofEngine";
-import { products, categories } from "@/data/catalog";
+import { products, categories, catalogue, productPrice, productCost } from "@/data/catalog";
 import { getVerifyRequests, saveVerifyRequests, VERIFY_STATUSES, type VerifyRequest, type VerifyStatus } from "@/lib/assistantBrain";
 import { needsAttention } from "@/lib/needsAttention";
 import { STAFF_ROLES, ROLE_INFO, isStaffRole, roleCanSeeTab, TAB_SECTIONS, TAB_SECTION, findDemoStaff, type AdminTabId } from "@/lib/staff";
@@ -33,6 +33,9 @@ import StockTab from "@/pages/admin/StockTab";
 import DispatchTab from "@/pages/admin/DispatchTab";
 import MaintenanceTab from "@/pages/admin/MaintenanceTab";
 import SupplyTab from "@/pages/admin/SupplyTab";
+import ProfitTab from "@/pages/admin/ProfitTab";
+import SourcingTab from "@/pages/admin/SourcingTab";
+import { getSourceRequests, getSourceRequestsAdminAsync, type SourceRequest } from "@/lib/sourceRequests";
 import { getPlans, issuePlanCode, getPlanCodes, revokePlanCode, type PlanDef, type PlanCode } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -67,6 +70,8 @@ export default function Admin() {
   const [snapReqs, setSnapReqs] = useState<SnapRequest[]>(() => getSnapRequests());
   const [snapSel, setSnapSel] = useState<string>("");
   const [snapItems, setSnapItems] = useState<SnapItem[]>([{ name: "", qty: 1, unitPrice: 0 }]);
+  const [snapPickerQ, setSnapPickerQ] = useState("");
+  const [sourceReqs, setSourceReqs] = useState<SourceRequest[]>(() => getSourceRequests());
   const [snapFees, setSnapFees] = useState({ workmanship: "", transport: "", dispatch: "", notes: "" });
   const [snapTools, setSnapTools] = useState<string[]>([]);
   const [snapToolInput, setSnapToolInput] = useState("");
@@ -98,6 +103,7 @@ export default function Admin() {
     const jobs = await getJobsAdminAsync();
     setAdminJobs(await Promise.all(jobs.map(async job => ({ job, bids: await getJobBidsAsync(job.code) }))));
     setSnapReqs(await getSnapRequestsAdminAsync());
+    setSourceReqs(await getSourceRequestsAdminAsync());
     setAdminReviews(await getReviewsAdminAsync());
     setAdminNotifications(await getNotificationsAsync());
   };
@@ -165,8 +171,8 @@ export default function Admin() {
   const revenue = orders.filter(o => o.status !== "cancelled").reduce((s, o) => s + o.totalNgn, 0);
   const TABS: { id: Tab; label: string }[] = [
     { id: "quotes", label: `Quotes (${quotes.length})` }, { id: "orders", label: `Orders (${orders.length})` },
-    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "verify", label: `Verification (${verifyReqs.length})${openVerify ? ` · ${openVerify} open` : ""}` }, { id: "jobs", label: `Jobs (${adminJobs.length})` }, { id: "snap", label: `Snap & Send (${snapReqs.length})${snapReqs.filter(r => r.status === "Received").length ? ` · ${snapReqs.filter(r => r.status === "Received").length} new` : ""}` }, { id: "reviews", label: `Reviews (${adminReviews.length})` }, { id: "notifications", label: `Notifications (${adminNotifications.length})` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "plans", label: "Plans" }, { id: "catalog", label: "Catalog" },
-    { id: "ops", label: "Ops Agent" }, { id: "supply", label: "Supply" },
+    { id: "bookings", label: `Bookings (${bookings.length})` }, { id: "verify", label: `Verification (${verifyReqs.length})${openVerify ? ` · ${openVerify} open` : ""}` }, { id: "jobs", label: `Jobs (${adminJobs.length})` }, { id: "snap", label: `Snap & Send (${snapReqs.length})${snapReqs.filter(r => r.status === "Received").length ? ` · ${snapReqs.filter(r => r.status === "Received").length} new` : ""}` }, { id: "reviews", label: `Reviews (${adminReviews.length})` }, { id: "notifications", label: `Notifications (${adminNotifications.length})` }, { id: "settings", label: "Settings & Rates" }, { id: "partners", label: `Partners (${partners.length})${pendingPartners.length ? ` · ${pendingPartners.length} pending` : ""}` }, { id: "plans", label: "Plans" }, { id: "catalog", label: "Catalog" }, { id: "profit", label: "Profit & Margins" },
+    { id: "ops", label: "Ops Agent" }, { id: "supply", label: "Supply" }, { id: "sourcing", label: `Sourcing (${sourceReqs.length})${sourceReqs.filter(r => r.status === "Received").length ? ` · ${sourceReqs.filter(r => r.status === "Received").length} unquoted` : ""}` },
     { id: "production", label: "Production" }, { id: "operator", label: "Production Jobs" }, { id: "qc", label: "Quality Control" }, { id: "stock", label: "Stock" }, { id: "dispatch", label: "Dispatch" }, { id: "maintenance", label: "Maintenance" },
     { id: "staff", label: "Staff" }, { id: "activity", label: "Activity" },
   ];
@@ -186,7 +192,7 @@ export default function Admin() {
   <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 space-y-8">
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-border border hairline">{[{ l: "Revenue (local orders)", v: formatNGN(revenue) }, { l: "Orders (local)", v: String(orders.length) }, { l: "Quotes (local)", v: String(quotes.length) }, { l: "Bookings (local)", v: String(bookings.length) }, { l: "Partners", v: String(partners.length) }, { l: "Network leads", v: String(leads.length) }, { l: "Commission earned (paid)", v: formatNGN(commissionEarned) }, { l: "Products live", v: String(products.length) }, { l: "Verify requests open", v: String(openVerify) }].map(c => (<div key={c.l} className="bg-background p-5"><div className="font-display font-bold text-2xl text-primary">{c.v}</div><div className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground mt-1">{c.l}</div></div>))}</div>
     <div className="flex items-center gap-4 flex-wrap"><ModeBadge /><span className="font-tech text-[11px] uppercase tracking-widest text-muted-foreground">Signed in as <span className="text-primary">{session?.name}</span> · {ROLE_INFO[myRole as keyof typeof ROLE_INFO]?.label || myRole}</span>{live && <button className="font-tech text-[11px] text-primary cursor-pointer uppercase tracking-widest" onClick={() => { void fetchServerSettings(); refresh(); }}>Reload server data</button>}</div>
-    {(() => { const queue = needsAttention({ orders, quotes, bookings, verifyRequests: verifyReqs, partners, jobs: adminJobs.map(x => ({ status: x.job.status, bids: x.bids })), snapRequests: snapReqs, leads }); return (
+    {(() => { const queue = needsAttention({ orders, quotes, bookings, verifyRequests: verifyReqs, partners, jobs: adminJobs.map(x => ({ status: x.job.status, bids: x.bids })), snapRequests: snapReqs, leads, sourceRequests: sourceReqs }); return (
     <section className="border hairline bg-card">
       <div className="px-5 py-3.5 border-b hairline flex flex-wrap gap-3 items-center justify-between"><span className="label-tech">Needs attention — all business routes through admin</span><span className="font-tech text-[11px] text-muted-foreground">{queue.length ? `${queue.reduce((s, r) => s + r.count, 0)} item(s) waiting` : "All clear"}</span></div>
       {queue.length ? <div>{queue.map((r, i) => (<div key={r.key} className={`px-5 py-3 flex flex-wrap gap-3 items-center justify-between ${i > 0 ? "border-t hairline" : ""}`}>
@@ -461,7 +467,7 @@ export default function Admin() {
         <div className="border hairline mt-6">
           <div className="px-4 py-3 border-b hairline flex flex-wrap gap-3 items-center justify-between">
             <p className="label-tech">Ops Agent — assessment draft (rules mode)</p>
-            <button onClick={() => { const d = draftAssessment({ description: sel.description, intent: sel.intent, address: sel.address }, products, getRates()); setSnapDraft(d); logActivity("ops_agent_draft", sel.code, "Assessment drafted from the description + live catalogue", { name: "Ops Agent (draft)", role: "ops_agent" }); toast.success("Draft ready — review it below, then load it into the editor"); }} className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary cursor-pointer">Draft with Ops Agent</button>
+            <button onClick={() => { const d = draftAssessment({ description: sel.description, intent: sel.intent, address: sel.address }, catalogue().map(p => ({ ...p, priceNgn: productPrice(p) })), getRates()); setSnapDraft(d); logActivity("ops_agent_draft", sel.code, "Assessment drafted from the description + live catalogue", { name: "Ops Agent (draft)", role: "ops_agent" }); toast.success("Draft ready — review it below, then load it into the editor"); }} className="font-tech text-[11px] border hairline px-3 py-1.5 hover:border-primary hover:text-primary cursor-pointer">Draft with Ops Agent</button>
           </div>
           {!snapDraft ? <p className="px-4 py-3 font-tech text-[11px] text-muted-foreground">The agent reads the customer's description, matches items against the LIVE catalogue and the delivery zone from the address. It never invents a price: unmatched lines come back at ₦0 flagged for you, and workmanship is always yours to set. A draft never saves by itself.</p>
           : <div className="px-4 py-3 space-y-2">
@@ -476,9 +482,16 @@ export default function Admin() {
         <div className="border hairline mt-6">
           <p className="label-tech px-4 py-3 border-b hairline">Assessment — price the job</p>
           <div className="p-4 space-y-3">
-            <datalist id="snap-catalog">{products.map(p => (<option key={p.slug} value={p.name}>{formatNGN(p.priceNgn)} {p.unit}</option>))}</datalist>
+            <div className="border hairline mb-3">
+              <p className="label-tech px-3 py-2 border-b hairline">Catalogue picker — all categories ({catalogue().length} products)</p>
+              <input aria-label="Catalogue picker — all categories" value={snapPickerQ} onChange={e => setSnapPickerQ(e.target.value)} placeholder="Search the whole catalogue — tiles, WC, cable, POP…" className="field-tech font-tech text-xs" />
+              <div className="max-h-56 overflow-auto p-2 space-y-3">
+                {categories.map(c => { const items = catalogue().filter(p => p.categorySlug === c.slug && p.active && (!snapPickerQ || (p.name + " " + p.summary).toLowerCase().includes(snapPickerQ.toLowerCase()))); if (!items.length) return null; return (<div key={c.id}><p className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground px-1">{c.name}</p><div className="flex flex-wrap gap-1.5 mt-1">{items.map(p => (<button key={p.slug} type="button" onClick={() => setSnapItems([...snapItems, { name: p.name, qty: 1, unitPrice: productPrice(p) }])} className="border hairline px-2 py-1 font-tech text-[11px] hover:border-primary hover:text-primary cursor-pointer">{p.name} — {formatNGN(productPrice(p))}</button>))}</div></div>); })}
+              </div>
+            </div>
+            <datalist id="snap-catalog">{catalogue().map(p => (<option key={p.slug} value={p.name}>{formatNGN(productPrice(p))} {p.unit}</option>))}</datalist>
             {snapItems.map((it, i) => (<div key={i} className="flex flex-wrap gap-2 items-end">
-              <div className="flex-1 min-w-52"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Item / material</label><input list="snap-catalog" value={it.name} onChange={e => { const v = e.target.value; const cat = products.find(p => p.name === v); setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, name: v, unitPrice: cat ? cat.priceNgn : x.unitPrice } : x)); }} className="field-tech" placeholder="Pick from catalog or type" /></div>
+              <div className="flex-1 min-w-52"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Item / material</label><input list="snap-catalog" value={it.name} onChange={e => { const v = e.target.value; const cat = catalogue().find(p => p.name === v); setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, name: v, unitPrice: cat ? productPrice(cat) : x.unitPrice } : x)); }} className="field-tech" placeholder="Pick from catalog or type" /></div>
               <div className="w-24"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Qty</label><input type="number" min={0} value={it.qty} onChange={e => setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, qty: Number(e.target.value) || 0 } : x))} className="field-tech font-tech" /></div>
               <div className="w-36"><label className="font-tech text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Unit price ₦</label><input type="number" min={0} value={it.unitPrice} onChange={e => setSnapItems(snapItems.map((x, xi) => xi === i ? { ...x, unitPrice: Number(e.target.value) || 0 } : x))} className="field-tech font-tech" /></div>
               <span className="font-tech text-sm pb-3 w-28 text-right">{formatNGN(it.qty * it.unitPrice)}</span>
@@ -576,6 +589,10 @@ export default function Admin() {
 
     {viewTab === "supply" && (<SupplyTab canManage={myRole === "admin" || myRole === "operations"} actorName={session?.name || "Owner"} />)}
 
+    {viewTab === "sourcing" && (<SourcingTab partners={partners} onChanged={setSourceReqs} />)}
+
+    {viewTab === "profit" && (<ProfitTab orders={orders} sourceRequests={sourceReqs} />)}
+
     {viewTab === "production" && (<ProductionBoard />)}
 
     {viewTab === "operator" && (<OperatorTab sessionName={session?.name || ""} />)}
@@ -592,8 +609,55 @@ export default function Admin() {
 
     {viewTab === "activity" && (<ActivityTab />)}
 
-    {viewTab === "catalog" && (<section><h2 className="font-display font-bold uppercase text-2xl mb-4">Catalog ({products.length} products, {categories.length} categories)</h2><div className="border hairline">{products.map((p, i) => (<div key={p.id} className={`px-5 py-3 flex justify-between text-sm ${i > 0 ? "border-t hairline" : ""}`}><span>{p.name}</span><span className="font-tech">{formatNGN(p.priceNgn)} {p.unit} · stock {p.stock}</span></div>))}</div></section>)}
+    {viewTab === "catalog" && (<CatalogSection />)}
 
     <Button variant="outline" className="rounded-none font-display uppercase" onClick={() => { endSession(); if (apiLiveSync()) void authLogout(); }}>Sign out</Button>
   </div></div>);
+}
+
+// Catalog tab (Store Stock-Up, 2026-10-26): the catalogue is data-file
+// seeded, and admin price/cost edits persist as settings overrides (the
+// same save path Settings & Rates uses) — productPrice()/productCost()
+// read them everywhere. Finds drafts (from completed sourcing requests)
+// publish/unpublish here.
+function CatalogSection() {
+  const [nonce, setNonce] = useState(0);
+  const all = catalogue();
+  const drafts = getFindsDrafts();
+  const toggleDraft = (slug: string, active: boolean) => {
+    saveFindsDrafts(getFindsDrafts().map(d => d.slug === slug ? { ...d, active } : d));
+    logActivity(active ? "catalog_draft_published" : "catalog_draft_unpublished", slug, `Finds draft ${slug} ${active ? "published to the shop" : "unpublished"}`);
+    toast.success(active ? "Draft published — it is live in the shop" : "Draft unpublished");
+    setNonce(n => n + 1);
+  };
+  return (<section key={nonce}>
+    <h2 className="font-display font-bold uppercase text-2xl mb-2">Catalog ({all.length} products, {categories.length} categories)</h2>
+    <p className="font-tech text-xs text-muted-foreground mb-4 max-w-3xl">Price and cost edits save as admin overrides and reprice the shop, assessments and the Profit view immediately. Costs are <b className="text-foreground">admin-only</b> — they never appear on customer pages. Board prices follow Settings &amp; Rates unless an override is set here.</p>
+    <div className="border hairline">{all.map((p, i) => (<CatalogEditRow key={p.slug} slug={p.slug} name={p.name} unit={p.unit} stock={p.stock} i={i} bump={() => setNonce(n => n + 1)} />))}</div>
+    {drafts.length > 0 && (<div className="mt-8"><p className="label-tech mb-3">Finds drafts — from sourcing requests ({drafts.length})</p>
+      <div className="border hairline">{drafts.map((d, i) => (<div key={d.slug} className={`px-5 py-3 flex flex-wrap gap-3 justify-between items-center text-sm ${i > 0 ? "border-t hairline" : ""}`}><span>{d.name} <span className="font-tech text-[11px] text-muted-foreground">· {formatNGN(productPrice(d))} · stock {d.stock} · {d.active ? "live in shop" : "draft — hidden from the shop"}</span></span><button onClick={() => toggleDraft(d.slug, !d.active)} className="border hairline px-3 py-1.5 font-tech text-[11px] uppercase tracking-widest hover:border-primary hover:text-primary cursor-pointer">{d.active ? "Unpublish" : "Publish"}</button></div>))}</div></div>)}
+  </section>);
+}
+
+function CatalogEditRow({ slug, name, unit, stock, i, bump }: { slug: string; name: string; unit: string; stock: number; i: number; bump: () => void }) {
+  const p = catalogue().find(x => x.slug === slug);
+  const effPrice = p ? productPrice(p) : 0;
+  const effCost = p ? productCost(p) : null;
+  const [price, setPrice] = useState(String(effPrice));
+  const [cost, setCost] = useState(effCost == null ? "" : String(effCost));
+  const dirty = Number(price) !== effPrice || (cost === "" ? null : Number(cost)) !== effCost;
+  const save = () => {
+    const pr = Math.max(0, Math.round(Number(price) || 0));
+    const co = cost.trim() === "" ? null : Math.max(0, Math.round(Number(cost) || 0));
+    saveCatalogOverride(slug, { ...(pr > 0 ? { priceNgn: pr } : {}), costPriceNgn: co });
+    logActivity("catalog_price_cost_set", slug, `${name}: price ${formatNGN(pr || effPrice)}${co != null ? `, cost ${formatNGN(co)}` : ", cost cleared"} by ${currentActor().name}`);
+    toast.success(`${name} saved`);
+    bump();
+  };
+  return (<div className={`px-5 py-3 flex flex-wrap gap-3 items-center justify-between text-sm ${i > 0 ? "border-t hairline" : ""}`}>
+    <span className="min-w-52 flex-1">{name}<span className="block font-tech text-[11px] text-muted-foreground">{unit} · stock {stock}</span></span>
+    <label className="font-tech text-[11px] text-muted-foreground">Price ₦ <input type="number" min={0} value={price} onChange={e => setPrice(e.target.value)} className="field-tech font-tech w-28 ml-1" aria-label={`Price for ${name}`} /></label>
+    <label className="font-tech text-[11px] text-muted-foreground">Cost ₦ <input type="number" min={0} placeholder="Not set" value={cost} onChange={e => setCost(e.target.value)} className="field-tech font-tech w-28 ml-1" aria-label={`Cost for ${name}`} /></label>
+    {dirty ? <button onClick={save} className="border hairline px-3 py-1.5 font-tech text-[11px] uppercase tracking-widest hover:border-primary hover:text-primary cursor-pointer">Save</button> : <span className="font-tech text-[11px] text-muted-foreground w-14 text-right">{effCost == null ? "no cost" : "saved"}</span>}
+  </div>);
 }

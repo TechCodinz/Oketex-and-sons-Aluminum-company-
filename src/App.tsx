@@ -33,6 +33,7 @@ import ProGuide from "./pages/ProGuide";
 import Plans from "./pages/Plans";
 import Jobs from "./pages/Jobs";
 import SnapSend from "./pages/SnapSend";
+import Source from "./pages/Source";
 import Prices from "./pages/Prices";
 export default function App(){
  // Phase 5: probe the backend once; when live, pull the server settings
@@ -57,6 +58,7 @@ export default function App(){
   <Route path="/book" element={<Book />} />
   <Route path="/jobs" element={<Jobs />} />
   <Route path="/snap-send" element={<SnapSend />} />
+  <Route path="/source" element={<Source />} />
   <Route path="/prices" element={<Prices />} />
   <Route path="/partners" element={<Partners />} />
   <Route path="/partners/:code" element={<PartnerProfile />} />

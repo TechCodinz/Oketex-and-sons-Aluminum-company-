@@ -40,7 +40,7 @@ export type AdminTabId =
   | "verify" | "plans" | "jobs" | "reviews" | "notifications" | "snap"
   | "staff" | "activity" | "ops"
   | "production" | "operator" | "qc" | "stock" | "dispatch" | "maintenance"
-  | "supply";
+  | "supply" | "profit" | "sourcing";
 
 export const TAB_ROLES: Record<AdminTabId, StaffRole[]> = {
   quotes: ["admin", "sales"],
@@ -55,6 +55,10 @@ export const TAB_ROLES: Record<AdminTabId, StaffRole[]> = {
   partners: ["admin", "operations", "sales", "accounts"],
   plans: ["admin", "accounts"],
   catalog: ["admin", "store"],
+  // Profit Intelligence: margins/costs are owner + accounts + sales eyes
+  // only — never customers, never the public site.
+  profit: ["admin", "accounts", "sales"],
+  sourcing: ["admin", "operations", "sales"],
   staff: ["admin"],
   activity: ["admin"],
   ops: ["admin", "operations", "sales", "production_manager"],
@@ -77,7 +81,8 @@ export const TAB_SECTION: Record<AdminTabId, TabSection> = {
   catalog: "Front Office", reviews: "Front Office", notifications: "Front Office",
   verify: "Front Office",
   partners: "Work & Partners", jobs: "Work & Partners", snap: "Work & Partners",
-  supply: "Work & Partners",
+  supply: "Work & Partners", sourcing: "Work & Partners",
+  profit: "Front Office",
   production: "Factory", operator: "Factory", qc: "Factory", stock: "Factory",
   dispatch: "Factory", maintenance: "Factory",
   ops: "System", staff: "System", activity: "System", plans: "System",

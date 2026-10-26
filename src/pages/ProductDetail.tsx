@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, Minus, Plus, ShieldCheck, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { products, categories, productPrice } from "@/data/catalog";
+import { products, catalogue, categories, productPrice } from "@/data/catalog";
 import { useCart } from "@/lib/cart";
 import { formatNGN, formatUSD } from "@/lib/money";
 import { ProductCard } from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
 export default function ProductDetail(){
- const {slug}=useParams(); const product=products.find(p=>p.slug===slug); const [qty,setQty]=useState(1); const {add}=useCart();
+ const {slug}=useParams(); const product=catalogue().find(p=>p.slug===slug); const [qty,setQty]=useState(1); const {add}=useCart();
  if(!product) return (<div className="mx-auto max-w-7xl px-4 py-24 text-center"><p className="font-display text-2xl uppercase">Product not found</p><Link to="/shop" className="text-primary font-tech text-sm mt-4 inline-block">← Back to catalog</Link></div>);
  const cat=categories.find(c=>c.id===product.categoryId); const related=products.filter(p=>p.categoryId===product.categoryId && p.id!==product.id).slice(0,4); const price=productPrice(product);
  return (<div><div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 md:py-16"><Link to="/shop" className="inline-flex gap-2 font-tech text-xs uppercase tracking-widest text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" /> Catalog</Link>

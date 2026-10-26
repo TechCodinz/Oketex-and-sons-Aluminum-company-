@@ -12,6 +12,7 @@ export interface AttentionInput {
   jobs?: { status: string; bids?: unknown[] }[];
   snapRequests?: { status: string }[];
   leads?: { status: string }[];
+  sourceRequests?: { status: string }[];
 }
 const n = (list: { status: string }[] | undefined, ...statuses: string[]) =>
   (list || []).filter(x => statuses.includes(x.status)).length;
@@ -26,6 +27,7 @@ export function needsAttention(input: AttentionInput): AttentionRow[] {
     { key: "jobs", label: "Jobs with bids awaiting award", count: (input.jobs || []).filter(j => j.status === "Open" && (j.bids?.length ?? 0) > 0).length, tab: "jobs" },
     { key: "snap", label: "Snap & Send requests", count: n(input.snapRequests, "Received", "Under Review", "Priced"), tab: "snap" },
     { key: "leads", label: "New partner leads", count: n(input.leads, "new"), tab: "partners" },
+    { key: "sourcing", label: "Sourcing requests awaiting a quote", count: n(input.sourceRequests, "Received"), tab: "sourcing" },
   ];
   return rows.filter(r => r.count > 0);
 }

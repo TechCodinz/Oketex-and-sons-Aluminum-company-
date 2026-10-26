@@ -129,9 +129,9 @@ export const RECIPES: Record<string, RecipeLine[]> = {
   // skirting priced per metre of floor perimeter; tiling labour ₦2,500/m² (estimator rate).
   tiling: [
     { name: "Floor/wall tiles", group: "Main Materials", unit: "tile", driver: "area", rate: 1, perKey: "tileArea", rounding: "ceil", wasteApplies: true, note: "Area × (1 + pattern waste) ÷ tile coverage" },
-    { name: "Tile adhesive (20kg bag)", group: "Main Materials", unit: "bag", driver: "area", rate: 0.25, rounding: "ceil", estimatorPriceNgn: 6500, note: "1 bag per 4m² — estimator rate" },
+    { name: "Tile adhesive (20kg bag)", group: "Main Materials", unit: "bag", driver: "area", rate: 0.25, rounding: "ceil", catalogSlug: "tile-adhesive-20kg", estimatorPriceNgn: 6500, note: "1 bag per 4m² — priced from the stocked Tile Adhesive 20kg product" },
     { name: "Skirting tiles/strips", group: "Main Materials", unit: "m", driver: "perimeter", rate: 1, rounding: "round1", estimatorPriceNgn: 900, note: "Floor perimeter — estimator rate" },
-    { name: "Grout", group: "Consumables", unit: "kg", driver: "area", rate: 0.5, rounding: "round1", estimatorPriceNgn: 450, note: "0.5kg per m² — estimator rate" },
+    { name: "Grout (5kg bag)", group: "Consumables", unit: "bag", driver: "area", rate: 0.1, rounding: "ceil", catalogSlug: "tile-grout-5kg", estimatorPriceNgn: 16500, note: "0.5kg per m² = one 5kg bag per 10m² — priced from the stocked Tile Grout 5kg product" },
     { name: "Tile spacers (pack)", group: "Accessories & Fixings", unit: "pack", driver: "area", rate: 0.1, rounding: "ceil", estimatorPriceNgn: 1200, note: "1 pack per 10m² — estimator rate" },
     { name: "Edge trim / threshold strips", group: "Accessories & Fixings", unit: "m", driver: "fixed", rate: 2, rounding: "exact", estimatorPriceNgn: 1500, note: "Door thresholds & exposed edges — adjust to your room; estimator rate" },
     { name: "Tile cutter (hire, per day)", group: "Tools & Equipment", unit: "day", driver: "fixed", rate: 1, rounding: "exact", estimatorPriceNgn: 5000, note: "Estimator rate — or your tiler brings their own" },
@@ -147,8 +147,8 @@ export const WOODWORK_RECIPES: Record<string, RecipeLine[]> = {
   "wood-shaker": [
     { name: "HDF/MDF boards 18mm (1.22 × 2.44m)", group: "Main Materials", unit: "board", driver: "area", rate: 1.6, perKey: "boardArea", rounding: "ceil", estimatorPriceNgn: 38500, note: "Frontage area × 1.6 carcass factor — estimator rate" },
     { name: "Hinges (soft-close)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door — estimator rate" },
-    { name: "Handles / knobs", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "≈1 roll per 3m of frontage — estimator rate" },
+    { name: "Handles / knobs", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", catalogSlug: "cabinet-bar-handle", estimatorPriceNgn: 3500, note: "1 per door — priced from the stocked Cabinet Bar Handle product" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "≈1 roll per 3m of frontage — priced from the stocked Edge Banding Roll product" },
     { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Wood glue (bottle)", group: "Consumables", unit: "bottle", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 3500, note: "Estimator rate" },
     { name: "Finishing — varnish / lacquer", group: "Consumables", unit: "L", driver: "area", rate: 0.25, rounding: "round1", estimatorPriceNgn: 7500, note: "≈0.25L per m² of frontage, 2 coats — estimator rate" },
@@ -158,9 +158,9 @@ export const WOODWORK_RECIPES: Record<string, RecipeLine[]> = {
     { name: "HDF/MDF boards 18mm (1.22 × 2.44m)", group: "Main Materials", unit: "board", driver: "area", rate: 1.9, perKey: "boardArea", rounding: "ceil", estimatorPriceNgn: 38500, note: "Base + wall units: frontage area × 1.9 — estimator rate" },
     { name: "Stone worktop (granite/quartz)", group: "Main Materials", unit: "m", driver: "frontage", rate: 1, rounding: "round1", estimatorPriceNgn: 28000, note: "Per metre of counter run — estimator rate, stone priced finally on selection" },
     { name: "Hinges (soft-close)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door — estimator rate" },
-    { name: "Handles / bar pulls", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door/drawer front — estimator rate" },
-    { name: "Drawer runners (pair)", group: "Accessories & Fixings", unit: "pair", driver: "frontage", rate: 0.67, rounding: "ceil", estimatorPriceNgn: 4500, note: "≈2 drawer banks per 3m run — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Handles / bar pulls", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", catalogSlug: "cabinet-bar-handle", estimatorPriceNgn: 3500, note: "1 per door/drawer front — priced from the stocked Cabinet Bar Handle product" },
+    { name: "Drawer runners (pair)", group: "Accessories & Fixings", unit: "pair", driver: "frontage", rate: 0.67, rounding: "ceil", catalogSlug: "drawer-runners-pair", estimatorPriceNgn: 6500, note: "≈2 drawer banks per 3m run — priced from the stocked Drawer Runners product" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Wood glue (bottle)", group: "Consumables", unit: "bottle", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 3500, note: "Estimator rate" },
     { name: "Carpentry labour (kitchen)", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", estimatorPriceNgn: 22000, note: "Per metre of kitchen run — estimator rate" },
@@ -170,7 +170,7 @@ export const WOODWORK_RECIPES: Record<string, RecipeLine[]> = {
     { name: "Door frame timber (set)", group: "Main Materials", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 15000, note: "Per door opening — estimator rate" },
     { name: "Butt hinges (heavy)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 3, rounding: "ceil", estimatorPriceNgn: 1800, note: "3 per door — estimator rate" },
     { name: "Door handles + lock set", group: "Accessories & Fixings", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 12500, note: "Per door — estimator rate" },
-    { name: "Screws, nails & glue (allowance)", group: "Consumables", unit: "lot", driver: "doors", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Screws, nails & glue (allowance)", group: "Consumables", unit: "lot", driver: "doors", rate: 0.5, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Finishing — varnish / paint", group: "Consumables", unit: "L", driver: "doors", rate: 0.5, rounding: "round1", estimatorPriceNgn: 7500, note: "≈0.5L per door, 2 coats — estimator rate" },
     { name: "Carpentry labour (doors)", group: "Labour", unit: "door", driver: "doors", rate: 1, rounding: "exact", estimatorPriceNgn: 25000, note: "Make + hang per door — estimator rate" },
   ],
@@ -178,7 +178,7 @@ export const WOODWORK_RECIPES: Record<string, RecipeLine[]> = {
     { name: "HDF/MDF boards 18mm (1.22 × 2.44m)", group: "Main Materials", unit: "board", driver: "area", rate: 1.3, perKey: "boardArea", rounding: "ceil", estimatorPriceNgn: 38500, note: "Frontage area × 1.3 (shelves + panelling) — estimator rate" },
     { name: "LED strip light (5m roll)", group: "Main Materials", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 9500, note: "Feature lighting for the media wall — estimator rate" },
     { name: "Shelf brackets / concealed pins", group: "Accessories & Fixings", unit: "pc", driver: "frontage", rate: 2, rounding: "ceil", estimatorPriceNgn: 1500, note: "2 per metre — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Screws & wall plugs (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Wood glue (bottle)", group: "Consumables", unit: "bottle", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 3500, note: "Estimator rate" },
     { name: "Finishing — paint / varnish", group: "Consumables", unit: "L", driver: "area", rate: 0.25, rounding: "round1", estimatorPriceNgn: 7500, note: "Estimator rate" },
@@ -227,23 +227,23 @@ export const PLUMBING_COMMON: RecipeLine[] = [
   { name: "PPR/PVC pipework — rough-in", group: "Main Materials", unit: "m", driver: "fixtures", rate: 6, rounding: "ceil", note: "≈6m of pipe run per wet point — quantity only, routes confirmed on site" },
   { name: "Valve, trap & fitting sets", group: "Accessories & Fixings", unit: "set", driver: "fixtures", rate: 1, rounding: "ceil", note: "1 set per wet point — quantity only" },
   { name: "Angle valves & flex connectors", group: "Accessories & Fixings", unit: "pc", driver: "fixtures", rate: 2, rounding: "ceil", note: "2 per wet point — quantity only" },
-  { name: "Silicone & thread seal (tube)", group: "Consumables", unit: "tube", driver: "fixtures", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 3500, note: "Estimator rate" },
+  { name: "Silicone & thread seal (tube)", group: "Consumables", unit: "tube", driver: "fixtures", rate: 0.5, rounding: "ceil", catalogSlug: "silicone-sealant-300ml", estimatorPriceNgn: 3500, note: "Priced from the stocked Silicone Sealant 300ml product" },
   { name: "Plumbing labour", group: "Labour", unit: "point", driver: "fixtures", rate: 1, rounding: "round1", estimatorPriceNgn: 15000, note: "Per wet fixture point, first + second fix — estimator rate" },
 ];
 
 /** Interior paint/ceiling rates. Paint coverage: emulsion 11 m²/L per coat × 2 coats;
- *  primer 12 m²/L, 1 coat. POP: 1 × 25kg bag casts ≈2.5m² at ~12mm. Plasterboard sheet
+ *  primer 12 m²/L, 1 coat. POP: 1 × 40kg bag casts ≈4m² at ~12mm. Plasterboard sheet
  *  1.2 × 2.4m = 2.88m². PVC ceiling panel 0.25 × 6m = 1.5m² per panel. */
 export const INTERIOR_PAINT_LINES: RecipeLine[] = [
-  { name: "Emulsion paint (2 coats)", group: "Main Materials", unit: "L", driver: "wallArea", rate: 2 / 11, rounding: "round1", estimatorPriceNgn: 3800, note: "Wall area ÷ 11 m²/L per coat × 2 coats — estimator rate" },
+  { name: "Emulsion paint 20L drum (2 coats)", group: "Main Materials", unit: "drum (20L)", driver: "wallArea", rate: (2 / 11) / 20, rounding: "ceil", catalogSlug: "emulsion-paint-20l", estimatorPriceNgn: 28000, note: "Wall area ÷ 11 m²/L per coat × 2 coats, sold in 20L drums — priced from the stocked Emulsion Paint 20L product" },
   { name: "Primer / sealer (1 coat)", group: "Main Materials", unit: "L", driver: "wallArea", rate: 1 / 12, rounding: "round1", estimatorPriceNgn: 3200, note: "Wall area ÷ 12 m²/L — estimator rate" },
-  { name: "Wall filler / screed putty", group: "Consumables", unit: "kg", driver: "wallArea", rate: 0.4, rounding: "round1", estimatorPriceNgn: 350, note: "≈0.4kg per m² — estimator rate" },
+  { name: "Wall filler / screed putty (20kg bag)", group: "Consumables", unit: "bag", driver: "wallArea", rate: 0.02, rounding: "ceil", catalogSlug: "screeding-putty-20kg", estimatorPriceNgn: 20000, note: "≈0.4kg per m² = one 20kg bag per 50m² — priced from the stocked Wall Screeding Putty 20kg product" },
   { name: "Abrasives & masking (allowance)", group: "Consumables", unit: "lot", driver: "fixed", rate: 1, rounding: "exact", estimatorPriceNgn: 7500, note: "Estimator rate" },
   { name: "Painting labour", group: "Labour", unit: "m²", driver: "wallArea", rate: 1, rounding: "round1", estimatorPriceNgn: 800, note: "Per m² of wall — estimator rate" },
 ];
 export const CEILING_LINES: Record<string, RecipeLine[]> = {
   pop: [
-    { name: "POP powder (25kg bag)", group: "Main Materials", unit: "bag", driver: "ceilingArea", rate: 0.4, rounding: "ceil", estimatorPriceNgn: 9500, note: "1 bag casts ≈2.5m² at ~12mm — estimator rate" },
+    { name: "POP powder (40kg bag)", group: "Main Materials", unit: "bag", driver: "ceilingArea", rate: 0.25, rounding: "ceil", catalogSlug: "pop-cement-40kg", estimatorPriceNgn: 11500, note: "1 × 40kg bag casts ≈4m² at ~12mm — priced from the stocked POP Cement 40kg product" },
     { name: "POP fibre & casting consumables", group: "Consumables", unit: "lot", driver: "ceilingArea", rate: 0.1, rounding: "ceil", estimatorPriceNgn: 12000, note: "≈1 lot per 10m² — estimator rate" },
     { name: "Cornice / coving", group: "Accessories & Fixings", unit: "m", driver: "perimeter", rate: 1, rounding: "round1", estimatorPriceNgn: 1200, note: "Room perimeter — estimator rate" },
     { name: "POP ceiling labour", group: "Labour", unit: "m²", driver: "ceilingArea", rate: 1, rounding: "round1", estimatorPriceNgn: 3500, note: "Estimator rate" },
@@ -267,7 +267,7 @@ export const CEILING_LINES: Record<string, RecipeLine[]> = {
  *  2.4 × 2.1m set = 5.04m² (sliding-glass-door); full-glaze uses the same sliding
  *  glazed-system baseline. The engine builds this line from catalog data. */
 export const WINDOW_EXTRA_LINES: RecipeLine[] = [
-  { name: "Silicone sealant (tube)", group: "Consumables", unit: "tube", driver: "area", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 3500, note: "≈1 tube per 3m² of opening — estimator rate" },
+  { name: "Silicone sealant (tube)", group: "Consumables", unit: "tube", driver: "area", rate: 0.34, rounding: "ceil", catalogSlug: "silicone-sealant-300ml", estimatorPriceNgn: 3500, note: "≈1 tube per 3m² of opening — priced from the stocked Silicone Sealant 300ml product" },
   { name: "Frame screws & plugs (pack)", group: "Accessories & Fixings", unit: "pack", driver: "openings", rate: 1, rounding: "ceil", estimatorPriceNgn: 4500, note: "1 pack per opening — estimator rate" },
   { name: "Installation labour", group: "Labour", unit: "m²", driver: "area", rate: 1, rounding: "round1", estimatorPriceNgn: 12000, note: "Per m² of opening — estimator rate" },
 ];
@@ -315,9 +315,9 @@ export const CABINETRY_RECIPES: Record<string, RecipeLine[]> = {
     { name: "HDF boards 18mm — carcass + doors (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.9, perKey: "boardArea", rounding: "ceil", rateKey: "hdfSheet", note: "Run × height × 1.9 carcass factor (base + wall units) — live Boards rate from Settings" },
     { name: "Marine plywood 18mm — sink/wet-zone unit (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "frontage", rate: 0.3, rounding: "ceil", rateKey: "marinePlywoodSheet", note: "≈1 sheet per 3m of run for the sink carcass (900mm wet zone) — live Boards rate from Settings" },
     { name: "Hinges (soft-close)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door — estimator rate" },
-    { name: "Handles / bar pulls", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door/drawer front — estimator rate" },
-    { name: "Drawer runners (pair)", group: "Accessories & Fixings", unit: "pair", driver: "frontage", rate: 0.67, rounding: "ceil", estimatorPriceNgn: 4500, note: "≈2 drawer banks per 3m run — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "≈1 roll per 3m of run — estimator rate" },
+    { name: "Handles / bar pulls", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", catalogSlug: "cabinet-bar-handle", estimatorPriceNgn: 3500, note: "1 per door/drawer front — priced from the stocked Cabinet Bar Handle product" },
+    { name: "Drawer runners (pair)", group: "Accessories & Fixings", unit: "pair", driver: "frontage", rate: 0.67, rounding: "ceil", catalogSlug: "drawer-runners-pair", estimatorPriceNgn: 6500, note: "≈2 drawer banks per 3m run — priced from the stocked Drawer Runners product" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "≈1 roll per 3m of run — priced from the stocked Edge Banding Roll product" },
     { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of kitchen run — live rate from Settings & Rates" },
   ],
@@ -325,8 +325,8 @@ export const CABINETRY_RECIPES: Record<string, RecipeLine[]> = {
     { name: "HDF boards 18mm — carcass + doors (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.6, perKey: "boardArea", rounding: "ceil", rateKey: "hdfSheet", note: "Frontage area (run × height) × 1.6 carcass factor — live Boards rate from Settings" },
     { name: "Hanging rail (chrome tube)", group: "Main Materials", unit: "m", driver: "frontage", rate: 1, rounding: "round1", estimatorPriceNgn: 2800, note: "Per metre of hanging run — estimator rate" },
     { name: "Hinges (soft-close) — hinged doors", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 2, rounding: "ceil", estimatorPriceNgn: 1200, note: "2 per door; sliding-door designs use a track kit instead — estimator rate" },
-    { name: "Handles / knobs", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 2500, note: "1 per door — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Handles / knobs", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 1, rounding: "ceil", catalogSlug: "cabinet-bar-handle", estimatorPriceNgn: 3500, note: "1 per door — priced from the stocked Cabinet Bar Handle product" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Screws & fixings (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of wardrobe run — live rate from Settings & Rates" },
   ],
@@ -334,7 +334,7 @@ export const CABINETRY_RECIPES: Record<string, RecipeLine[]> = {
     { name: "MDF boards 18mm — console + panels (8×4ft sheet)", group: "Main Materials", unit: "sheet", driver: "area", rate: 1.3, perKey: "boardArea", rounding: "ceil", rateKey: "mdfSheet", note: "Frontage area × 1.3 (console + panelling) — live Boards rate from Settings" },
     { name: "LED strip light (5m roll)", group: "Main Materials", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 9500, note: "Feature lighting — estimator rate" },
     { name: "Shelf brackets / concealed pins", group: "Accessories & Fixings", unit: "pc", driver: "frontage", rate: 2, rounding: "ceil", estimatorPriceNgn: 1500, note: "2 per metre — estimator rate" },
-    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Edge banding (50m roll)", group: "Consumables", unit: "roll", driver: "frontage", rate: 0.34, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Screws & wall plugs (box)", group: "Consumables", unit: "box", driver: "frontage", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 8500, note: "Estimator rate" },
     { name: "Cabinet labour", group: "Labour", unit: "m run", driver: "frontage", rate: 1, rounding: "round1", rateKey: "cabinetLabourPerM", note: "Per linear metre of unit run — live rate from Settings & Rates" },
   ],
@@ -350,7 +350,7 @@ export const CABINETRY_RECIPES: Record<string, RecipeLine[]> = {
     { name: "Door frame timber (set)", group: "Main Materials", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 15000, note: "Per door opening — estimator rate" },
     { name: "Butt hinges (heavy)", group: "Accessories & Fixings", unit: "pc", driver: "doors", rate: 3, rounding: "ceil", estimatorPriceNgn: 1800, note: "3 per door — estimator rate" },
     { name: "Door handles + lock set", group: "Accessories & Fixings", unit: "set", driver: "doors", rate: 1, rounding: "ceil", estimatorPriceNgn: 12500, note: "Per door — estimator rate" },
-    { name: "Screws, nails & glue (allowance)", group: "Consumables", unit: "lot", driver: "doors", rate: 0.5, rounding: "ceil", estimatorPriceNgn: 6000, note: "Estimator rate" },
+    { name: "Screws, nails & glue (allowance)", group: "Consumables", unit: "lot", driver: "doors", rate: 0.5, rounding: "ceil", catalogSlug: "edge-banding-roll", estimatorPriceNgn: 7500, note: "Priced from the stocked Edge Banding Roll product" },
     { name: "Finishing — varnish / paint", group: "Consumables", unit: "L", driver: "doors", rate: 0.5, rounding: "round1", estimatorPriceNgn: 7500, note: "≈0.5L per door, 2 coats — estimator rate" },
     { name: "Carpentry labour (doors)", group: "Labour", unit: "door", driver: "doors", rate: 1, rounding: "exact", estimatorPriceNgn: 25000, note: "Make + hang per door — estimator rate" },
   ],

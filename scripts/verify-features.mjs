@@ -1,7 +1,7 @@
 // Feature verification for Deliverables A–F (run: node scripts/verify-features.mjs)
 // Bundles the REAL lib helpers with esbuild and asserts the spec fixtures.
 import { build } from "esbuild";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const entry = `
@@ -27,7 +27,11 @@ export { TRADE_CARDS, cabinetUnits } from "@/data/tradeGuides";
 export { STANDARD_TOOLS } from "@/lib/snapRequests";
 export { mergeLibrary, validateContribution, knowledgeBriefing } from "@/lib/knowledge";
 export { DEFAULT_RATES, getRates } from "@/lib/settings";
-export { products, productPrice } from "@/data/catalog";
+export { products, categories, catalogue, productPrice, productCost } from "@/data/catalog";
+export { profitPerUnit, marginPct, markupPct, suggestedPrice, productProfit, categoryRollups, realizedProfit } from "@/lib/profit";
+export { quoteTotal, aggregateDemand, demandKeyword, sourcingProfitFor, draftProductFromSourceRequest } from "@/lib/sourceRequests";
+export { catalogueMatch, partnerMatches, buildSourcingBrief, draftQuote } from "@/lib/sourcingAgent";
+export { SELLER_CATEGORIES } from "@/data/partnerTerms";
 export { estimateProject, defaultEstimatorInput } from "@/lib/projectEstimator";
 `;
 writeFileSync("/tmp/verify-entry.ts", entry);
@@ -393,6 +397,79 @@ const hingeLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name.startsWi
 eq("estimator kitchen fixture: 5 doors -> 10 hinges", hingeLine?.qty, 10);
 const labourLine = kitchen.groups.flatMap(g => g.lines).find(l => l.name === "Cabinet labour");
 eq("estimator kitchen fixture: labour = 3m at the Settings cabinet rate", labourLine?.total, 3 * R.cabinetLabourPerM);
+console.log("— Store Stock-Up: catalogue completeness (2026-10-26) —");
+ok("catalogue stocks 70+ products", M.products.length >= 70);
+ok("catalogue spans 13+ categories", M.categories.length >= 13);
+for (const c of M.categories) ok(`category ${c.slug} has at least 1 active product`, M.products.some(p => p.active && p.categorySlug === c.slug));
+ok("every product: price > 0, unit set, known category", M.products.every(p => p.priceNgn > 0 && !!p.unit && M.categories.some(c => c.slug === p.categorySlug)));
+ok("every product has a non-empty image", M.products.every(p => typeof p.image === "string" && p.image.length > 4));
+ok("every product image EXISTS on disk under public/", M.products.every(p => existsSync("public" + p.image)));
+ok("product images live under /images/ and are <= 200KB", M.products.filter(p => p.image.startsWith("/images/products/")).every(p => { try { return readFileSync("public" + p.image).length <= 210 * 1024; } catch { return false; } }));
+const bySlug = Object.fromEntries(M.products.map(p => [p.slug, p]));
+const basket = [["portland-cement-50kg", 10], ["ceramic-floor-tiles-40x40", 4], ["copper-cable-25mm-100m", 1]];
+eq("mixed basket: 10 cement + 4 tile cartons + 1 cable coil", basket.reduce((sum, [slug, qty]) => sum + M.productPrice(bySlug[slug]) * qty, 0), 205000);
+const waMsg = basket.map(([slug, qty]) => `${qty}× ${bySlug[slug].name}`).join(", ");
+ok("checkout WhatsApp message carries the new items", basket.every(([slug]) => waMsg.includes(bySlug[slug].name)));
+ok("Hard to Find shelf stocked (8+ niche products)", M.products.filter(p => p.categorySlug === "hard-to-find" && p.hardToFind).length >= 8);
+
+console.log("— Dots connected: picker, drafter, estimator, supply, search —");
+const adminSrc = readFileSync("src/pages/Admin.tsx", "utf8");
+ok("admin assessment picker is grouped + searchable over the FULL catalogue", adminSrc.includes('aria-label="Catalogue picker — all categories"') && adminSrc.includes("catalogue().filter"));
+const pricedCatalogue = M.catalogue().map(p => ({ ...p, priceNgn: M.productPrice(p) }));
+const draft2 = M.draftAssessment({ description: "tiling the bathroom floor, painting the walls, new water closet and water tank", intent: "build", address: "Lekki, Lagos" }, pricedCatalogue, R);
+const adh = draft2.items.find(i => i.name.includes("Tile Adhesive"));
+ok("drafter prices a new-category keyword case (tiling -> tile adhesive at catalogue price)", !!adh && adh.matched && adh.unitPrice === 8500);
+ok("drafter also matched paint + WC + tank from the catalogue", ["Emulsion Paint", "Water Closet", "Water Tank"].every(n => draft2.items.some(i => i.name.includes(n) && i.matched && i.unitPrice > 0)));
+const tiling = M.estimateProject({ ...M.defaultEstimatorInput("tiling", "tile-large"), length: 4, width: 5, height: 0, wallsPct: 0, tileWallsPct: 0 });
+const tLines = tiling.groups.flatMap(g => g.lines);
+const adhLine = tLines.find(l => l.name.includes("Tile adhesive"));
+eq("estimator tiling fixture: 20m2 -> 5 adhesive bags", adhLine?.qty, 5);
+eq("estimator tiling fixture: adhesive priced FROM the stocked product", adhLine?.unitPrice, 8500);
+eq("estimator tiling fixture: adhesive price source is the catalogue", adhLine?.priceSource, "catalog");
+const groutLine = tLines.find(l => l.name.includes("Grout"));
+eq("estimator tiling fixture: grout = 2 x 5kg bags at the stocked price", groutLine?.total, 33000);
+ok("supply categories cover the new shelves", ["Boards & Panels", "Interior & Hardware", "Concrete & Masonry"].every(c => M.SELLER_CATEGORIES.includes(c)));
+const shopSrc = readFileSync("src/pages/Shop.tsx", "utf8");
+ok("shop search covers description + specs (customer synonyms)", shopSrc.includes("p.description") && shopSrc.includes("Object.values(p.specs"));
+ok("shop has the sort control", shopSrc.includes('aria-label="Sort products"') && shopSrc.includes("price-asc") && shopSrc.includes("price-desc"));
+
+console.log("— Profit Intelligence —");
+eq("profit: 10,000 - 7,500 = 2,500 per unit", M.profitPerUnit(10000, 7500), 2500);
+eq("profit: margin on 10,000/7,500 = 25%", M.marginPct(10000, 7500), 25);
+ok("profit: markup on 10,000/7,500 = 33.3%", Math.abs(M.markupPct(10000, 7500) - 33.333) < 0.01);
+eq("profit: suggested price cost 7,500 @ 30% -> 10,700", M.suggestedPrice(7500, 30), 10700);
+eq("profit: suggested price 55,000 @ 25% -> 73,350", M.suggestedPrice(55000, 25), 73350);
+const lowMargin = M.productProfit({ slug: "portland-cement-50kg", name: "Portland Cement 50kg", categorySlug: "concrete-masonry", price: 12500, cost: 12000 }, 25);
+ok("profit: cement at dealer cost flags below the 25% target", lowMargin.belowTarget === true && Math.abs((lowMargin.marginPct ?? 0) - 4) < 0.01);
+const noCost = M.productProfit({ slug: "x", name: "x", categorySlug: "plumbing", price: 5000, cost: null }, 25);
+ok("profit: no cost -> no invented margin", noCost.profitPerUnit === null && noCost.marginPct === null && noCost.belowTarget === false);
+const realized = M.realizedProfit([{ items: [{ name: "Portland Cement 50kg", quantity: 10, unitPriceNgn: 12500, costPriceNgn: 12000, categorySlug: "concrete-masonry" }, { name: "Legacy line", quantity: 1, unitPriceNgn: 1000 }] }]);
+eq("profit: realized from snapshots = 10 x 500", realized.totalNgn, 5000);
+eq("profit: uncosted lines excluded + counted", realized.uncostedLines, 1);
+ok("profit: no cost leaks into customer display pages", ["src/pages/Shop.tsx", "src/components/ProductCard.tsx", "src/pages/ProductDetail.tsx", "src/pages/Home.tsx", "src/pages/Track.tsx", "src/pages/Source.tsx"].every(f => !readFileSync(f, "utf8").includes("costPriceNgn")));
+
+console.log("— Sourcing Store + Sourcing Agent —");
+const scQuote = M.draftQuote(40000, 15000, 25);
+eq("sourcing agent draft: 40,000 + 15,000 @ 25% -> landed 73,350", scQuote.totalNgn, 73350);
+eq("sourcing agent draft: service line is the margin", scQuote.serviceNgn, 18350);
+const scReq = { code: "SC-2026-0001", productName: "Exotic floor lamp", description: "", photo: null, referenceLink: "", quantity: 1, area: "ogun-lagos", customerName: "Ada", customerPhone: "08030000000", status: "Approved", quote: { itemNgn: 40000, shippingNgn: 15000, serviceNgn: 18350, costTotalNgn: 55000, leadDays: 21, note: "", quotedAt: "2026-10-26T00:00:00.000Z" }, agentBrief: null, timeline: [], createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z" };
+eq("sourcing: landed total = item + shipping + service", M.quoteTotal(scReq.quote), 73350);
+eq("sourcing: realized profit = landed - cost", M.sourcingProfitFor(scReq), 18350);
+eq("sourcing: unapproved requests earn nothing yet", M.sourcingProfitFor({ ...scReq, status: "Quoted" }), null);
+const demand = M.aggregateDemand([scReq, { ...scReq, code: "SC-2026-0002", productName: "Solar street light 200w", area: "ogun-lagos" }, { ...scReq, code: "SC-2026-0003", productName: "solar street light", area: "ss-se" }]);
+ok("sourcing: demand aggregation groups by normalized keyword", demand[0].keyword === "solar street light" && demand[0].count === 2);
+const cm = M.catalogueMatch({ productName: "marine plywood 18mm", description: "" }, M.products);
+ok("sourcing agent: 'marine plywood 18mm' matches the stocked board", !!cm && cm.product.slug === "marine-plywood-18mm");
+const pm = M.partnerMatches({ productName: "solar street light", description: "" }, [{ code: "OKP-T", name: "Solar Partner", supplyCapabilities: ["Solar accessories, inverters and panels"], status: "approved" }]);
+eq("sourcing agent: partner capability match (solar)", pm.length, 1);
+const brief = M.buildSourcingBrief({ ...scReq, productName: "marine plywood 18mm" }, { catalogue: M.products, partners: [] });
+ok("sourcing agent: brief carries catalogue match + 5-link search pack", !!brief.catalogue && brief.links.length === 5 && brief.aiNote === undefined);
+const draftProd = M.draftProductFromSourceRequest({ ...scReq, status: "Delivered", productName: "Exotic floor lamp" }, 25);
+ok("finds->shelf: draft lands in Global Finds, hidden until published", draftProd.categorySlug === "hard-to-find" && draftProd.active === false && draftProd.stock === 0);
+eq("finds->shelf: draft price = suggested at target from the SC cost", draftProd.priceNgn, M.suggestedPrice(55000, 25));
+ok("sourcing server wired: schema + setup + route", readFileSync("server/schema.sql.ts", "utf8").includes("source_requests") && readFileSync("server/handlers/setup.ts", "utf8").includes('"source_requests"') && readFileSync("server/router.ts", "utf8").includes('"/api/source-requests"'));
+ok("track sourcing tab carries no cost data", !readFileSync("src/pages/Track.tsx", "utf8").includes("costTotalNgn"));
+
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -84,6 +84,26 @@ export function snapRequestFromRow(r: any, opts: { publicSafe?: boolean } = {}):
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
   };
 }
+export function sourceRequestFromRow(r: any, opts: { publicSafe?: boolean } = {}): any {
+  // Full record lives in `data` jsonb; columns win where they exist.
+  // Public lookups (code only, no phone proof) never expose the phone —
+  // and never expose the quote's COST side (costTotalNgn): customers see
+  // the landed total, lead time and note only.
+  const d = typeof r.data === "string" ? JSON.parse(r.data || "{}") : (r.data || {});
+  const quote = d.quote ?? null;
+  return {
+    ...d,
+    code: r.code,
+    status: r.status ?? d.status ?? "Received",
+    productName: r.product_name ?? d.productName ?? "",
+    customerName: r.customer_name ?? d.customerName ?? "",
+    customerPhone: opts.publicSafe ? "" : (r.customer_phone ?? d.customerPhone ?? ""),
+    landedTotalNgn: r.landed_total_ngn == null ? (d.landedTotalNgn ?? null) : Number(r.landed_total_ngn),
+    quote: opts.publicSafe && quote ? { ...quote, costTotalNgn: undefined } : quote,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : d.createdAt,
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : d.updatedAt,
+  };
+}
 export function bidFromRow(r: any): any {
   return {
     id: r.id, jobCode: r.job_code, partnerCode: r.partner_code, partnerName: r.partner_name,

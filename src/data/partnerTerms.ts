@@ -31,6 +31,8 @@ export const PRO_TRADES = [
 export const SELLER_CATEGORIES = [
   "Roofing Materials", "Timber", "Tiles", "Plumbing", "Electrical", "Paint",
   "Tools & Equipment", "Cement & Blocks", "Windows & Doors", "General Building Materials",
+  // Store Stock-Up (2026-10-26): the stocked shelves partners can supply.
+  "Boards & Panels", "Interior & Hardware", "Concrete & Masonry", "Hard to Find / Global Finds",
 ] as const;
 
 /** Commission for a lead at a given value. The pct defaults to the launch

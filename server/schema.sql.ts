@@ -255,5 +255,18 @@ export const SCHEMA_STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS knowledge_status_idx ON knowledge_entries (status)`,
   `CREATE INDEX IF NOT EXISTS knowledge_trade_idx ON knowledge_entries (trade)`,
+  // ---- Source-Anything / Global Sourcing (2026-10-26, src/lib/sourceRequests.ts) ----
+  `CREATE TABLE IF NOT EXISTS source_requests (
+    code TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'Received',
+    customer_name TEXT NOT NULL DEFAULT '',
+    customer_phone TEXT NOT NULL DEFAULT '',
+    product_name TEXT NOT NULL DEFAULT '',
+    landed_total_ngn INTEGER NOT NULL DEFAULT 0,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS source_requests_created_idx ON source_requests (created_at DESC)`,
 ];
 export const SCHEMA_SQL = SCHEMA_STATEMENTS.join(";\n") + ";";

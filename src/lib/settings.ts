@@ -56,6 +56,15 @@ export interface OketexSettings {
   promoBanner?: PromoBanner;
   /** Phase 6 price watch: admin-compiled market prices (starts EMPTY — no invented numbers). */
   priceWatch?: PriceWatchMaterial[];
+  /** Profit Intelligence (2026-10-26): admin target margin + per-product
+   *  price/cost overrides keyed by product slug. Overrides are how admin
+   *  price/cost edits in the Catalog / Profit tabs persist — the catalogue
+   *  data file stays the seed, settings carry the owner's live numbers. */
+  profit?: { targetMarginPct?: number };
+  catalogOverrides?: Record<string, { priceNgn?: number; costPriceNgn?: number | null }>;
+  /** Finds → Shelf drafts (Addendum 4): products drafted from completed
+   *  sourcing requests, merged into the catalogue at read time. */
+  findsDrafts?: import("@/data/catalog").Product[];
 }
 
 export const DELIVERY_ZONE_IDS = ["pickup", "ogun-lagos", "south-west", "ss-se", "abuja-north"] as const;
@@ -101,6 +110,9 @@ export function getSettings(): OketexSettings {
     coupons: server.coupons ?? local.coupons,
     promoBanner: server.promoBanner ?? local.promoBanner,
     priceWatch: server.priceWatch ?? local.priceWatch,
+    profit: { ...local.profit, ...server.profit },
+    catalogOverrides: server.catalogOverrides ?? local.catalogOverrides,
+    findsDrafts: server.findsDrafts ?? local.findsDrafts,
   };
 }
 export function saveSettings(patch: OketexSettings) {
@@ -116,6 +128,9 @@ export function saveSettings(patch: OketexSettings) {
     coupons: patch.coupons ?? cur.coupons,
     promoBanner: patch.promoBanner ?? cur.promoBanner,
     priceWatch: patch.priceWatch ?? cur.priceWatch,
+    profit: { ...cur.profit, ...patch.profit },
+    catalogOverrides: patch.catalogOverrides ?? cur.catalogOverrides,
+    findsDrafts: patch.findsDrafts ?? cur.findsDrafts,
   };
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
 }
@@ -175,6 +190,32 @@ export function businessWaLink(text: string): string {
 export function getCoupons(): Coupon[] { return getSettings().coupons ?? []; }
 export function getPromoBanner(): PromoBanner { return getSettings().promoBanner ?? { text: "", active: false }; }
 export function getPriceWatch(): PriceWatchMaterial[] { return getSettings().priceWatch ?? []; }
+
+/** Profit Intelligence helpers. Target margin defaults to 25% and is
+ *  admin-editable in the Profit tab; catalog overrides carry the owner's
+ *  live price/cost edits per product slug. */
+export function getProfitTargetMargin(): number {
+  const v = getSettings().profit?.targetMarginPct;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 && v < 95 ? v : 25;
+}
+export function getCatalogOverrides(): Record<string, { priceNgn?: number; costPriceNgn?: number | null }> {
+  return getSettings().catalogOverrides ?? {};
+}
+export function saveCatalogOverride(slug: string, patch: { priceNgn?: number; costPriceNgn?: number | null }) {
+  const all = { ...getCatalogOverrides() };
+  all[slug] = { ...all[slug], ...patch };
+  saveSettings({ catalogOverrides: all });
+  void saveSettingsAsync({ catalogOverrides: all }).catch(() => { /* demo mode: local stands */ });
+}
+
+/** Finds → Shelf drafts (products drafted from sourcing requests). */
+export function getFindsDrafts(): import("@/data/catalog").Product[] {
+  return getSettings().findsDrafts ?? [];
+}
+export function saveFindsDrafts(list: import("@/data/catalog").Product[]) {
+  saveSettings({ findsDrafts: list });
+  void saveSettingsAsync({ findsDrafts: list }).catch(() => { /* demo mode: local stands */ });
+}
 
 /** Coupon discount on a subtotal, in whole naira.
  *  ROUNDING RULE: percent discounts are rounded HALF UP (Math.round on a
