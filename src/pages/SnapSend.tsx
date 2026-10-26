@@ -126,7 +126,7 @@ export default function SnapSend() {
 
   if (doneCode) {
     const waText = `Hello ${getBusiness().name}, I just sent a Snap & Send request (${doneCode}). My name is ${name}. Please review it.`;
-    return (<div><PageHead kicker="Snap & Send" title="Sent — we are on it" lead="Your request is with the Oketex team. We review the photo, price the job (materials + workmanship + transport + dispatch), and you approve the price before anything starts — no surprises." />
+    return (<div><PageHead kicker="Snap & Send" title="Sent — we are on it" lead="Your request is with the Oketex team. We review the photo, price the job openly — the items and tools the repair needs, workmanship, transport and dispatch — and you approve the price before anything starts. Then we channel the best available pro in your region to get it done — no surprises." />
       <div className="mx-auto max-w-3xl px-4 sm:px-6 py-12">
         <div className="border hairline bg-card p-8 text-center">
           <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
@@ -143,7 +143,7 @@ export default function SnapSend() {
   }
 
   return (<div>
-    <PageHead kicker="Snap & Send" title="Snap it. Send it. We fix it." lead="Take a photo or short video of the problem, what you want built, or an item you want to sell. We price it openly, you approve, and a trusted Oketex pro does the job — you follow every step." />
+    <PageHead kicker="Snap & Send" title="Snap it. Send it. We fix it." lead="Snap or record anything — a leak or damage at home, at the shop or on site, something you want built, or an item you want to sell. Wherever you are, we assess it, list the items and tools the repair needs with prices, and channel the best available pro in your region to get it done — you approve the price first, then follow every step." />
     <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
       <div className="flex gap-2 mb-8">{[1, 2, 3].map(n => (<div key={n} className={`flex-1 border px-3 py-2 font-tech text-[11px] uppercase tracking-widest ${step >= n ? "border-primary text-primary" : "hairline text-muted-foreground"}`}>Step {n} — {n === 1 ? "What do you need?" : n === 2 ? "Snap & describe" : "Your details"}</div>))}</div>
 

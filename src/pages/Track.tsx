@@ -114,6 +114,7 @@ export default function Track() {
             <p className="label-tech px-4 py-3 border-b hairline">Our price breakdown</p>
             <div className="px-4 py-3 space-y-1.5 font-tech text-sm">
               {r.assessment.items.map((it, i) => (<div key={i} className="flex justify-between"><span>{it.qty}× {it.name}</span><span>{formatNGN(it.qty * it.unitPrice)}</span></div>))}
+              {(r.assessment.tools || []).length > 0 && <div className="flex justify-between gap-4"><span className="shrink-0">Tools &amp; equipment for the job</span><span className="text-right text-muted-foreground">{(r.assessment.tools || []).join(", ")}</span></div>}
               {r.assessment.workmanshipNgn > 0 && <div className="flex justify-between"><span>Workmanship</span><span>{formatNGN(r.assessment.workmanshipNgn)}</span></div>}
               {r.assessment.transportNgn > 0 && <div className="flex justify-between"><span>Transport</span><span>{formatNGN(r.assessment.transportNgn)}</span></div>}
               {r.assessment.dispatchNgn > 0 && <div className="flex justify-between"><span>Dispatch</span><span>{formatNGN(r.assessment.dispatchNgn)}</span></div>}

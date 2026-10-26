@@ -8,10 +8,26 @@ import { getPartnerTerms } from "./settings";
 import { uid } from "./proStorage";
 
 export interface PartnerProduct { id: string; name: string; priceNgn: number; unit: string }
+/** Partner kind tags (2026-10-26) — how a partner presents to customers:
+ *  the Join form's "I am joining as…" multi-select. A partner can carry
+ *  several (e.g. a depot that is both Wholesaler and Retailer). The
+ *  directory filters on these; partners without tags fall back to their
+ *  role via partnerKindTags(). */
+export const PARTNER_KIND_TAGS = ["Trades Pro / Engineer", "Materials Seller", "Wholesaler", "Retailer"] as const;
+/** Effective kind tags: the partner's own tags when set, else the role
+ *  mapping (pro → Trades Pro / Engineer, seller → Materials Seller,
+ *  both → both of those). */
+export function partnerKindTags(p: Partner): string[] {
+  if (p.kindTags && p.kindTags.length) return p.kindTags;
+  if (p.role === "pro") return ["Trades Pro / Engineer"];
+  if (p.role === "seller") return ["Materials Seller"];
+  return ["Trades Pro / Engineer", "Materials Seller"];
+}
 export interface Partner {
   code: string; role: PartnerRole; businessName: string; contactName: string;
   phone: string; email?: string; location: string; areas: string;
   trades: string[]; categories: string[];
+  kindTags?: string[];
   yearsExperience?: number; cacNumber?: string; bio: string;
   products: PartnerProduct[];
   /** Stage S3 (two-way flow): what this partner can supply OKETEX — items
@@ -54,21 +70,21 @@ function samplePartners(): Partner[] {
     {
       code: "PRT-2026-SAMPLE1", role: "pro", businessName: "Adebayo Roofing Works", contactName: "Adebayo Ogunleye",
       phone: "", location: "Lekki, Lagos", areas: "Lekki, Ajah, Ikeja, Lagos Mainland",
-      trades: ["Roofer", "Carpenter"], categories: [], yearsExperience: 11, cacNumber: "",
+      trades: ["Roofer", "Carpenter"], categories: [], kindTags: ["Trades Pro / Engineer"], yearsExperience: 11, cacNumber: "",
       bio: "Sample listing — specialist longspan and stone-coated installation crew. Roof structure carpentry, sheet fixing, ridge and gutter work with photo reports on every job.",
       products: [], status: "approved", verified: true, featured: true, sample: true, createdAt: now,
     },
     {
       code: "PRT-2026-SAMPLE2", role: "pro", businessName: "Engr. Musa Structural Services", contactName: "Engr. Musa Abdullahi",
       phone: "", location: "Gwarinpa, Abuja", areas: "Abuja FCT, Nasarawa, Niger",
-      trades: ["Engineer", "Builder", "Surveyor"], categories: [], yearsExperience: 14, cacNumber: "",
+      trades: ["Engineer", "Builder", "Surveyor"], categories: [], kindTags: ["Trades Pro / Engineer"], yearsExperience: 14, cacNumber: "",
       bio: "Sample listing — structural design, setting-out and site supervision for residential and commercial builds. COREN-registered practice (verify credentials on engagement).",
       products: [], status: "approved", verified: true, featured: false, sample: true, createdAt: now,
     },
     {
       code: "PRT-2026-SAMPLE3", role: "seller", businessName: "Ibafo Roofing Depot", contactName: "Mrs. F. Okonkwo",
       phone: "", location: "Ibafo, Ogun State", areas: "Ibafo, Mowe, Berger, Lagos delivery daily",
-      trades: [], categories: ["Roofing Materials", "General Building Materials"],
+      trades: [], categories: ["Roofing Materials", "General Building Materials"], kindTags: ["Materials Seller", "Wholesaler", "Retailer"],
       bio: "Sample listing — wholesale and retail roofing sheets, stone-coated tiles and accessories with same-day cutting and delivery along the Lagos–Ibadan expressway.",
       supplyCapabilities: ["Longspan aluminium sheets 0.45mm/0.55mm", "Stone-coated tiles", "Ridge caps & flashing", "Roofing screws & fasteners (sample capabilities)"],
       products: [
@@ -82,7 +98,7 @@ function samplePartners(): Partner[] {
     {
       code: "PRT-2026-SAMPLE4", role: "seller", businessName: "Lekki Tiles & Finishing Hub", contactName: "Chinedu E.",
       phone: "", location: "Sangotedo, Lagos", areas: "Lekki–Ajah axis, delivery across Lagos",
-      trades: [], categories: ["Tiles", "Paint"],
+      trades: [], categories: ["Tiles", "Paint"], kindTags: ["Materials Seller", "Retailer"],
       bio: "Sample listing — floor and wall tiles, sanitary-finish paints and tiling consumables. Showroom samples available; tilers can be recommended on request.",
       supplyCapabilities: ["Floor & wall tiles", "Tile adhesive & grout", "Emulsion paint (sample capabilities)"],
       products: [
@@ -95,7 +111,7 @@ function samplePartners(): Partner[] {
     {
       code: "PRT-2026-SAMPLE5", role: "seller", businessName: "Ibadan Timber & Boards Market Ltd", contactName: "Alhaji R. Balogun",
       phone: "", location: "Bodija, Ibadan", areas: "Ibadan, Oyo State, Osun delivery",
-      trades: [], categories: ["Timber", "Cement & Blocks"],
+      trades: [], categories: ["Timber", "Cement & Blocks"], kindTags: ["Materials Seller", "Wholesaler"],
       bio: "Sample listing — treated roofing timber, formwork boards, marine ply and sandcrete blocks ex-yard. Bulk rates for estate projects.",
       supplyCapabilities: ["Treated roofing timber", "Marine plywood & formwork boards", "Sandcrete blocks", "Generator hire (sample capabilities)"],
       products: [

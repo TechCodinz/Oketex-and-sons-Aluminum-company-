@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { BadgeCheck, CheckCircle2, Copy, MessageCircle, Plus, Star, X } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { addPartnerAsync, partnerCode, type Partner } from "@/lib/partnerStorage";
+import { addPartnerAsync, partnerCode, PARTNER_KIND_TAGS, type Partner } from "@/lib/partnerStorage";
 import { register as registerAccount } from "@/lib/auth";
 import { probeApi } from "@/lib/api";
 import { PRO_TRADES, SELLER_CATEGORIES, type PartnerRole } from "@/data/partnerTerms";
@@ -19,8 +19,10 @@ const EMPTY_ROW: ProdRow = { name: "", price: "", unit: "per piece" };
 export default function Join() {
   const TERMS = getPartnerTerms();
   const [role, setRole] = useState<PartnerRole>("pro");
+  const [kinds, setKinds] = useState<string[]>([]);
   const [form, setForm] = useState({ business: "", contact: "", phone: "", email: "", location: "", areas: "", years: "", cac: "", bio: "", password: "" });
   const [tags, setTags] = useState<string[]>([]);
+  const toggleKind = (k: string) => setKinds(prev => (prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]));
   const [supplyText, setSupplyText] = useState("");
   const [rows, setRows] = useState<ProdRow[]>([{ ...EMPTY_ROW }]);
   const [agree, setAgree] = useState(false);
@@ -37,7 +39,7 @@ export default function Join() {
     if (role === "both" ? !(tags.some(t => (PRO_TRADES as readonly string[]).includes(t)) && tags.some(t => (SELLER_CATEGORIES as readonly string[]).includes(t))) : !tags.length) return toast.error(role === "both" ? "Pick at least one trade AND one category" : role === "pro" ? "Pick at least one trade" : "Pick at least one category");
     if (!agree) return toast.error("Please agree to the partner launch terms");
     const partner: Partner = {
-      code: partnerCode(), role,
+      code: partnerCode(), role, kindTags: kinds,
       businessName: form.business.trim(), contactName: form.contact.trim(),
       phone: form.phone.trim(), email: form.email.trim() || undefined,
       location: form.location.trim(), areas: form.areas.trim() || form.location.trim(),
@@ -97,6 +99,9 @@ export default function Join() {
               <button key={v} onClick={() => { setRole(v); setTags([]); }} className={cn("px-6 py-3 font-display font-semibold uppercase tracking-wider cursor-pointer", role === v ? "bg-primary text-primary-foreground" : "bg-background hover:text-primary")}>{l}</button>
             ))}
           </div>
+          <p className="label-tech mt-6 mb-3">I am joining as… (tick all that apply — customers filter the directory by these)</p>
+          <div className="flex flex-wrap gap-2">{PARTNER_KIND_TAGS.map(k => (<button key={k} onClick={() => toggleKind(k)} className={cn("border px-3 py-2 font-tech text-xs uppercase tracking-wider cursor-pointer", kinds.includes(k) ? "border-primary bg-primary/15 text-primary" : "hairline hover:border-primary/60")}>{k}</button>))}</div>
+          <p className="font-tech text-[11px] text-muted-foreground mt-2">Leave unticked and we tag you from the role above. Wholesalers and Retailers are seller kinds — tick them alongside Materials Seller if they fit.</p>
         </div>
         <div>
           <p className="label-tech mb-4">02 — Business details</p>

@@ -152,7 +152,25 @@ export function buildChasers(data: OpsData, now: Date = new Date()): ChaserItem[
 export interface DraftItem { name: string; qty: number; unitPrice: number; matched: boolean; note: string }
 export interface AssessmentDraft {
   items: DraftItem[]; transportNgn: number; transportNote: string;
-  workmanshipNgn: 0; flags: string[];
+  workmanshipNgn: 0; flags: string[]; tools: string[];
+}
+/** Tools the drafter suggests from the customer's own words — a small,
+ *  honest rule table (no rule, no suggestion). The admin ticks/edits the
+ *  final list in the assessment editor; tools are never priced lines. */
+export const TOOL_RULES: { test: RegExp; tools: string[] }[] = [
+  { test: /leak|drip|seep/, tools: ["Sealant gun"] },
+  { test: /plumb|pipe|tap\b|toilet|basin|water damage|burst/, tools: ["Pipe wrench", "Water pump pliers"] },
+  { test: /roof|sheet|gutter|ridge|ceiling/, tools: ["Ladder", "Drill machine", "Measuring tape", "Safety boots/gloves"] },
+  { test: /tile|tiling|plaster|screed|render/, tools: ["Trowel", "Spirit level"] },
+  { test: /weld|gate|steel|iron|metal/, tools: ["Welding machine", "Angle grinder", "Safety boots/gloves"] },
+  { test: /electric|wiring|socket|breaker|lighting|fan\b/, tools: ["Screwdriver set"] },
+  { test: /scaffold|storey|high-rise|tall building/, tools: ["Scaffold"] },
+];
+export function suggestTools(description: string): string[] {
+  const text = (description || "").toLowerCase();
+  const out: string[] = [];
+  for (const rule of TOOL_RULES) if (rule.test.test(text)) for (const t of rule.tools) if (!out.includes(t)) out.push(t);
+  return out;
 }
 interface CatalogLike { name: string; priceNgn: number; unit: string }
 const ZONE_KEYWORDS: { zone: string; words: string[] }[] = [
@@ -210,13 +228,15 @@ export function draftAssessment(
   }
   if (!transportNgn) flags.push(transportNote);
   flags.push("Set workmanship — the agent never prices labour; a human sets it.");
-  return { items, transportNgn, transportNote, workmanshipNgn: 0, flags };
+  const tools = suggestTools(input.description || "");
+  if (tools.length) flags.push(`Suggested tools from the description: ${tools.join(", ")} — confirm in the editor.`);
+  return { items, transportNgn, transportNote, workmanshipNgn: 0, flags, tools };
 }
 
 // ---------------- Assignment recommender ----------------
 export interface PartnerCandidate {
   partner: Partner; score: number; rating: number; ratingCount: number; ratingLabel: string;
-  load: number; distanceKm: number | null; reasons: string[];
+  load: number; distanceKm: number | null; areaMatch: string | null; reasons: string[];
 }
 export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371; const rad = (d: number) => (d * Math.PI) / 180;
@@ -224,13 +244,48 @@ export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; l
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 10) / 10;
 }
-/** Rank approved + available partners for a job: trade is a HARD filter;
- *  score = rating × 10 − active load × 8 + a distance bonus inside 20 km.
- *  Unrated partners get a clearly-labelled neutral 3.0 baseline — never a
- *  fake rating. The admin still makes the actual assignment. */
+const AREA_STOPWORDS = new Set(["street", "st", "road", "rd", "avenue", "ave", "close", "crescent", "drive", "lane", "state", "nigeria", "off", "opp", "near", "along", "expressway", "area", "zone", "phase", "plot", "house", "no"]);
+/** Normalised area tokens from a free-text address ("14 Unity Rd, Ibafo,
+ *  Ogun State" → ["unity", "ibafo", "ogun"]). */
+export function addressTokens(address: string): string[] {
+  return Array.from(new Set((address || "").toLowerCase().split(/[^a-z0-9]+/).map(t => t.trim()).filter(t => t.length >= 3 && !AREA_STOPWORDS.has(t))));
+}
+const labelTokensOf = (label: string) => label.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3 && !AREA_STOPWORDS.has(t));
+/** Does this partner list the customer's area? `areas` entries match on
+ *  ANY of their tokens — partners write their coverage freely ("Lekki,
+ *  Ajah", "delivery across Lagos"). The base `location` is only a
+ *  fallback and matches on its FIRST token (the base town in "Ibafo,
+ *  Ogun") — otherwise every Lagos-based partner would "cover" every
+ *  Lagos address through the shared state word. Returns the label AS THE
+ *  PARTNER WROTE IT (for the reason line), or null. */
+export function partnerAreaMatch(p: Partner, tokens: string[]): string | null {
+  if (!tokens.length) return null;
+  const tokenSet = new Set(tokens);
+  for (const label of String(p.areas || "").split(/[,;]/).map(s => s.trim()).filter(Boolean)) {
+    if (labelTokensOf(label).some(t => tokenSet.has(t))) return label;
+  }
+  const location = String(p.location || "").trim();
+  const first = location ? labelTokensOf(location)[0] : undefined;
+  if (location && first && tokenSet.has(first)) return location;
+  return null;
+}
+const AREA_BONUS = 60;   // region-first: a pro who covers the area outranks a higher-rated outsider
+const BUDGET_BONUS = 15; // only when NO candidate covers the area (see below)
+/** Rank approved + available partners for a job, REGION FIRST:
+ *  trade is a HARD filter. A partner whose listed areas (or base location)
+ *  cover the customer's address gets a strong bonus and the reason
+ *  "Covers your area — {area}". Score otherwise = rating × 10 − active
+ *  load × 8 + a distance bonus inside 20 km. When NO candidate covers the
+ *  area, the top picks carry "No pro lists this area — best available by
+ *  rating & workload", and — only when an agreed/budget figure AND past
+ *  lead values exist — the candidate whose past work came closest UNDER
+ *  that figure is preferred (no lead data → rating & workload only; the
+ *  agent never invents a partner price). Unrated partners get a clearly
+ *  labelled neutral 3.0 baseline. The admin still assigns manually. */
 export function recommendPartners(input: {
   trade?: string; partners: Partner[]; reviews: Review[];
   snapRequests: SnapRequest[]; siteGeo?: { lat: number; lng: number } | null;
+  address?: string; agreedPriceNgn?: number | null; leads?: Lead[];
 }): PartnerCandidate[] {
   const trade = (input.trade || "").trim();
   const candidates = input.partners.filter(p => {
@@ -238,6 +293,20 @@ export function recommendPartners(input: {
     if (!trade) return true;
     return p.trades.includes(trade) || p.categories.includes(trade);
   });
+  const tokens = addressTokens(input.address || "");
+  const areaMatches = new Map(candidates.map(p => [p.code, partnerAreaMatch(p, tokens)]));
+  const anyAreaCovered = [...areaMatches.values()].some(Boolean);
+  // Budget fallback data: each candidate's largest past lead at/under the
+  // agreed figure. Computed only when the area route found nobody.
+  const budget = input.agreedPriceNgn != null && input.agreedPriceNgn > 0 ? input.agreedPriceNgn : null;
+  const bestUnder = new Map<string, number>();
+  if (!anyAreaCovered && tokens.length && budget && input.leads?.length) {
+    for (const p of candidates) {
+      const under = input.leads.filter(l => l.partnerCode === p.code && l.estValueNgn > 0 && l.estValueNgn <= budget).map(l => l.estValueNgn);
+      if (under.length) bestUnder.set(p.code, Math.max(...under));
+    }
+  }
+  const closestUnder = bestUnder.size ? Math.max(...bestUnder.values()) : null;
   const scored = candidates.map(partner => {
     const summary = summarizeReviews(input.reviews.filter(r => r.partnerCode === partner.code && r.status === "Published"));
     const rated = summary.count > 0;
@@ -247,9 +316,15 @@ export function recommendPartners(input: {
     const pGeo = (partner as Partner & { geo?: { lat: number; lng: number } | null }).geo;
     const distanceKm = input.siteGeo && pGeo ? haversineKm(input.siteGeo, pGeo) : null;
     const distanceBonus = distanceKm != null ? Math.max(0, 20 - distanceKm) : 0;
-    const score = Math.round((rating * 10 - load * 8 + distanceBonus) * 10) / 10;
-    const reasons = [ratingLabel, `${load} active Snap & Send job${load === 1 ? "" : "s"}`, distanceKm != null ? `~${distanceKm} km from site` : "Distance unknown"];
-    return { partner, score, rating, ratingCount: summary.count, ratingLabel, load, distanceKm, reasons };
+    const areaMatch = areaMatches.get(partner.code) ?? null;
+    const budgetWin = closestUnder != null && bestUnder.get(partner.code) === closestUnder;
+    const score = Math.round((rating * 10 - load * 8 + distanceBonus + (areaMatch ? AREA_BONUS : 0) + (budgetWin ? BUDGET_BONUS : 0)) * 10) / 10;
+    const reasons: string[] = [];
+    if (areaMatch) reasons.push(`Covers your area — ${areaMatch}`);
+    else if (tokens.length && !anyAreaCovered) reasons.push("No pro lists this area — best available by rating & workload");
+    if (budgetWin) reasons.push(`Closest past work under the agreed price — ${formatNGN(closestUnder!)}`);
+    reasons.push(ratingLabel, `${load} active Snap & Send job${load === 1 ? "" : "s"}`, distanceKm != null ? `~${distanceKm} km from site` : "Distance unknown");
+    return { partner, score, rating, ratingCount: summary.count, ratingLabel, load, distanceKm, areaMatch, reasons };
   });
   return scored.sort((a, b) => b.score - a.score).slice(0, 3);
 }

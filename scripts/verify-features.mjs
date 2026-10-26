@@ -14,8 +14,8 @@ export { couponDiscountNgn, validateCoupon, orderGrandTotal, dispatchFor } from 
 export { summarizeReviews } from "@/lib/reviews";
 export { assessmentTotal, snapCommission } from "@/lib/snapRequests";
 export { renderTemplate } from "@/lib/notify";
-export { translate } from "@/lib/i18n";
-export { toPublicPartner } from "@/lib/partnerStorage";
+export { translate, DICT, LANGS } from "@/lib/i18n";
+export { toPublicPartner, partnerKindTags } from "@/lib/partnerStorage";
 export { needsAttention } from "@/lib/needsAttention";
 export { buildBriefing, draftAssessment, recommendPartners, haversineKm } from "@/lib/opsAgent";
 export { cuttingListTotal, canTransition } from "@/lib/production";
@@ -128,6 +128,25 @@ eq("pcm nav.track is Pidgin", M.translate("pcm", "nav.track"), "Track Am");
 ok("yo hero title part 2 present", M.translate("yo", "hero.title2").length > 0);
 ok("ha nav.jobs present", M.translate("ha", "nav.jobs").length > 0);
 eq("unknown key falls back to the key", M.translate("pcm", "no.such.key"), "no.such.key");
+// Igbo (2026-10-26): SAME key coverage as every other language — scripted
+// completeness: for every DICT key, every non-EN language must carry an
+// entry, and each language must cover exactly the same number of keys.
+const dictKeys = Object.keys(M.DICT);
+const nonEnLangs = M.LANGS.map(l => l.id).filter(id => id !== "en");
+ok("Igbo is in the switcher list", M.LANGS.some(l => l.id === "ig" && l.label === "Igbo"));
+for (const lang of nonEnLangs) {
+  const covered = dictKeys.filter(k => typeof M.DICT[k][lang] === "string" && M.DICT[k][lang].length > 0).length;
+  eq(`i18n completeness: ${lang} covers all ${dictKeys.length} keys`, covered, dictKeys.length);
+}
+eq("ig nav.shop = Ụlọ ahịa", M.translate("ig", "nav.shop"), "Ụlọ ahịa");
+eq("ig nav.quote = Nweta ọnụ ahịa", M.translate("ig", "nav.quote"), "Nweta ọnụ ahịa");
+eq("ig nav.track = Sochie", M.translate("ig", "nav.track"), "Sochie");
+eq("ig nav.snapSend = Were foto ziga", M.translate("ig", "nav.snapSend"), "Were foto ziga");
+eq("ig nav.partners = Ndị mmekọ", M.translate("ig", "nav.partners"), "Ndị mmekọ");
+eq("ig nav.jobs = Ọrụ", M.translate("ig", "nav.jobs"), "Ọrụ");
+eq("ig nav.book = Debe ọrụ", M.translate("ig", "nav.book"), "Debe ọrụ");
+ok("ig hero sub present", M.translate("ig", "hero.sub").length > 40);
+ok("ig hero keeps brand numbers untranslated", M.translate("ig", "hero.kicker").includes("2009"));
 
 console.log("— Snap & Send assessment + commission (Snap & Send Jobs) —");
 // Spec fixture: items 2 × ₦6,500 = 13,000 + workmanship 25,000 + transport
@@ -152,12 +171,19 @@ eq("pickup grand total stays 100,000", M.orderGrandTotal(100000, 0, 3000, "picku
 console.log("— Admin-Routing: public partner mapping + needs-attention queue —");
 // (a) The public partner shape strips phone + email but keeps everything
 // a customer legitimately sees (name, trades, ratings inputs, products).
-const fullPartner = { code: "PRT-2026-TEST", role: "seller", businessName: "Test Depot", contactName: "T. Est", phone: "+234 803 555 0999", email: "test@depot.ng", location: "Ibafo", areas: "Lagos", trades: [], categories: ["Roofing Materials"], bio: "x", products: [{ id: "1", name: "Sheet", priceNgn: 100, unit: "per m" }], status: "approved", verified: true, featured: false, createdAt: new Date().toISOString() };
+const fullPartner = { code: "PRT-2026-TEST", role: "seller", businessName: "Test Depot", contactName: "T. Est", phone: "+234 803 555 0999", email: "test@depot.ng", location: "Ibafo", areas: "Lagos", trades: [], categories: ["Roofing Materials"], kindTags: ["Materials Seller", "Wholesaler"], bio: "x", products: [{ id: "1", name: "Sheet", priceNgn: 100, unit: "per m" }], status: "approved", verified: true, featured: false, createdAt: new Date().toISOString() };
 const pub = M.toPublicPartner(fullPartner);
 ok("public mapping strips phone", pub.phone === "");
 ok("public mapping strips email", pub.email === undefined);
 ok("public mapping keeps business name + products", pub.businessName === "Test Depot" && pub.products.length === 1);
+ok("public mapping keeps kindTags (public-safe directory tags)", JSON.stringify(pub.kindTags) === JSON.stringify(["Materials Seller", "Wholesaler"]));
 ok("public mapping does not mutate the source record", fullPartner.phone === "+234 803 555 0999");
+// Kind tags (2026-10-26): explicit tags win; untagged partners fall back
+// to the role mapping the directory filters rely on.
+eq("kindTags: explicit tags pass through", M.partnerKindTags(fullPartner).join("|"), "Materials Seller|Wholesaler");
+eq("kindTags fallback: pro → Trades Pro / Engineer", M.partnerKindTags({ role: "pro" }).join("|"), "Trades Pro / Engineer");
+eq("kindTags fallback: seller → Materials Seller", M.partnerKindTags({ role: "seller" }).join("|"), "Materials Seller");
+eq("kindTags fallback: both → pro + seller", M.partnerKindTags({ role: "both" }).join("|"), "Trades Pro / Engineer|Materials Seller");
 // (b) Needs-attention aggregator over a seeded pending set.
 const queue = M.needsAttention({
   orders: [{ status: "pending" }, { status: "delivered" }, { status: "pending" }],
@@ -205,6 +231,15 @@ ok("drafter maps 'leaking gutter joint' → the catalogue gutter item", !!gutter
 eq("drafter uses the CATALOGUE price ₦6,500 (never invented)", gutterLine?.unitPrice, 6500);
 eq("drafter transport = ogun-lagos zone fee from the address", draft.transportNgn, 45000);
 ok("drafter flags workmanship for a human", draft.flags.some(f => /workmanship/i.test(f)));
+// Drafter tool suggestions (2026-10-26): small keyword rule table — a leak
+// suggests the sealant gun, roofing work the ladder/drill, plumbing a pipe
+// wrench; no rule matched → no tools invented.
+ok("drafter tools: leaking gutter → Sealant gun suggested", draft.tools.includes("Sealant gun"));
+ok("drafter tools: gutter/roof work → Ladder + Drill machine suggested", draft.tools.includes("Ladder") && draft.tools.includes("Drill machine"));
+const plumbingDraft = M.draftAssessment({ description: "burst pipe under the kitchen sink, water everywhere", intent: "repair", address: "Ikeja, Lagos" }, catalogue, { deliveryZones: { pickup: 0, "ogun-lagos": 45000 } });
+ok("drafter tools: burst pipe → Pipe wrench + Water pump pliers", plumbingDraft.tools.includes("Pipe wrench") && plumbingDraft.tools.includes("Water pump pliers"));
+const quietDraft = M.draftAssessment({ description: "please come and look at the building", intent: "other", address: "Enugu" }, catalogue, { deliveryZones: { pickup: 0 } });
+eq("drafter tools: no keyword rule → no tools suggested", quietDraft.tools.length, 0);
 // Ops Agent recommender: trade hard filter + rating/load ordering
 const recPartners = [
   { code: "PRT-A", businessName: "Alpha Roofing", status: "approved", role: "pro", trades: ["Roofing"], categories: [], products: [] },
@@ -223,6 +258,27 @@ eq("recommender: trade-mismatched partner excluded", recs.length, 2);
 eq("recommender: higher rating + lower load wins (#1 = Alpha)", recs[0]?.partner.code, "PRT-A");
 ok("recommender: reasons carry the rating", /★/.test(recs[0]?.reasons.join(" ") || ""));
 eq("haversine (6.68,3.45)→(6.45,3.40) ≈ 26.2 km", Math.round(M.haversineKm({ lat: 6.68, lng: 3.45 }, { lat: 6.45, lng: 3.4 }) * 10) / 10, 26.2);
+// Recommender REGION-FIRST fixture (2026-10-26, spec): two roofers —
+// A: 5.0★ covering "Lekki, Ajah"; B: 4.0★ covering "Ibafo, Magboro".
+// An Ibafo request must put B first WITH the area reason (region beats
+// rating); an address nobody covers (Surulere) falls back to rating +
+// workload with the fallback reason on the top pick.
+const regionPartners = [
+  { code: "PRT-RA", businessName: "Apex Roofing (Lekki)", status: "approved", role: "pro", trades: ["Roofer"], categories: [], products: [], location: "Lekki, Lagos", areas: "Lekki, Ajah" },
+  { code: "PRT-RB", businessName: "Beta Roofing (Ibafo)", status: "approved", role: "pro", trades: ["Roofer"], categories: [], products: [], location: "Ibafo, Ogun", areas: "Ibafo, Magboro" },
+];
+const regionReviews = [
+  { id: "rr1", partnerCode: "PRT-RA", rating: 5, status: "Published" }, { id: "rr2", partnerCode: "PRT-RA", rating: 5, status: "Published" },
+  { id: "rr3", partnerCode: "PRT-RB", rating: 4, status: "Published" },
+];
+const ibafoRecs = M.recommendPartners({ trade: "Roofer", partners: regionPartners, reviews: regionReviews, snapRequests: [], siteGeo: null, address: "14 Unity Road, Ibafo, Ogun State" });
+eq("region: Ibafo request → the Ibafo pro outranks the 5.0★ Lekki pro", ibafoRecs[0]?.partner.code, "PRT-RB");
+ok("region: winner carries the area reason", (ibafoRecs[0]?.reasons || []).some(r => r === "Covers your area — Ibafo"));
+eq("region: winner's areaMatch is the partner's own label", ibafoRecs[0]?.areaMatch, "Ibafo");
+const surulereRecs = M.recommendPartners({ trade: "Roofer", partners: regionPartners, reviews: regionReviews, snapRequests: [], siteGeo: null, address: "23 Allen Avenue, Surulere, Lagos" });
+eq("region: uncovered area → best by rating first (5.0★ pro)", surulereRecs[0]?.partner.code, "PRT-RA");
+ok("region: uncovered area → fallback reason on the top pick", (surulereRecs[0]?.reasons || []).some(r => r === "No pro lists this area — best available by rating & workload"));
+eq("region: uncovered area → no areaMatch claimed", surulereRecs[0]?.areaMatch, null);
 // Ops Agent briefing: stuck detection at > 24h
 const fixedNow = new Date("2026-10-25T12:00:00.000Z");
 const old25h = new Date(fixedNow.getTime() - 25 * 3600_000).toISOString();

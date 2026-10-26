@@ -24,7 +24,8 @@ export function cleanAssessment(a: any): any {
     unitPrice: Math.max(0, Number(i?.unitPrice) || 0),
   })).filter((i: any) => i.name || i.qty > 0);
   const nonNeg = (v: any) => Math.max(0, Number(v) || 0);
-  return { items, workmanshipNgn: nonNeg(a?.workmanshipNgn), transportNgn: nonNeg(a?.transportNgn), dispatchNgn: nonNeg(a?.dispatchNgn), notes: String(a?.notes || "").slice(0, 2000) };
+  const tools = (Array.isArray(a?.tools) ? a.tools : []).map((t: any) => String(t || "").trim().slice(0, 80)).filter(Boolean).slice(0, 30);
+  return { items, workmanshipNgn: nonNeg(a?.workmanshipNgn), transportNgn: nonNeg(a?.transportNgn), dispatchNgn: nonNeg(a?.dispatchNgn), notes: String(a?.notes || "").slice(0, 2000), tools };
 }
 
 export async function loadSnap(code: string): Promise<any | null> {

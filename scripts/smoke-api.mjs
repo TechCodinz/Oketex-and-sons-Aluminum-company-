@@ -146,6 +146,17 @@ check("detail with owner phone-proof retains full contact", r.json?.partner?.pho
 r = await call(api.adminPartners, { method: "GET", headers: { cookie: adminCookie } });
 const admPartner = (r.json?.partners || []).find(p => p.code === "PRT-2026-SMOKE");
 check("admin list retains partner phone + email", admPartner?.phone === "08031112222" && admPartner?.email === "smoke@partner.test", JSON.stringify(admPartner).slice(0, 200));
+// Kind tags (2026-10-26): kindTags ride the jsonb record through create →
+// public list/detail — public-safe (shown in the directory), while the
+// phone stays stripped.
+r = await call(api.partners, { method: "POST", body: { ...partnerBody, code: "PRT-2026-KINDS", businessName: "Kinds Wholesale Ltd", email: "kinds@partner.test", phone: "08032223333", kindTags: ["Materials Seller", "Wholesaler", "Retailer"] } });
+check("partner with kindTags registers", r.status === 201 || r.status === 200, `got ${r.status}: ${r.raw.slice(0, 140)}`);
+await call(api.adminPartners, { method: "PATCH", headers: { cookie: adminCookie }, body: { code: "PRT-2026-KINDS", status: "approved" } });
+r = await call(api.partners, { method: "GET" });
+const pubKinds = (r.json?.partners || []).find(p => p.code === "PRT-2026-KINDS");
+check("public list carries kindTags but still strips phone", !!pubKinds && Array.isArray(pubKinds.kindTags) && pubKinds.kindTags.includes("Wholesaler") && pubKinds.kindTags.includes("Retailer") && pubKinds.phone === "", JSON.stringify(pubKinds).slice(0, 240));
+r = await call(api.partnerByCode, { method: "GET", query: { code: "PRT-2026-KINDS" } });
+check("public detail carries kindTags", Array.isArray(r.json?.partner?.kindTags) && r.json.partner.kindTags.length === 3, r.raw.slice(0, 200));
 
 // ---------- 6. Leads + server-side commission snapshot ----------
 console.log("\n[6] Leads — commission snapshot from server-effective terms");
@@ -288,11 +299,14 @@ check("code lookup without phone proof strips the phone", r.json?.request?.custo
 check("geo round-trips through storage", r.json?.request?.geo?.lat === 6.7349 && r.json?.request?.geo?.lng === 3.4274, r.raw.slice(0, 160));
 r = await call(api.snapRequests, { method: "GET", query: { code: "SR-2026-SMOKE", phone: "08035556666" } });
 check("phone proof reveals the phone", r.json?.request?.customerPhone === "08035556666", r.raw.slice(0, 160));
-const snapAssessment = { items: [{ name: "Longspan sheet 0.45mm", qty: 2, unitPrice: 6500 }], workmanshipNgn: 25000, transportNgn: 8000, dispatchNgn: 2500, notes: "Ridge repair" };
+const snapAssessment = { items: [{ name: "Longspan sheet 0.45mm", qty: 2, unitPrice: 6500 }], workmanshipNgn: 25000, transportNgn: 8000, dispatchNgn: 2500, notes: "Ridge repair", tools: ["Ladder", "Drill machine", "Sealant gun"] };
 r = await call(api.snapAssess, { method: "POST", body: { code: "SR-2026-SMOKE", assessment: snapAssessment } });
 check("assess without admin rejected (401)", r.status === 401, `got ${r.status}`);
 r = await call(api.snapAssess, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SR-2026-SMOKE", assessment: snapAssessment } });
 check("assess → Priced, server total ₦48,500 (13,000 + 25,000 + 8,000 + 2,500)", r.status === 200 && r.json?.request?.status === "Priced" && r.json?.request?.totalNgn === 48500, `got ${r.status}: ${r.raw.slice(0, 200)}`);
+check("assess persists the tools list (and tools never touch the total)", JSON.stringify(r.json?.request?.assessment?.tools) === JSON.stringify(["Ladder", "Drill machine", "Sealant gun"]), r.raw.slice(0, 240));
+r = await call(api.snapRequests, { method: "GET", query: { code: "SR-2026-SMOKE", phone: "08035556666" } });
+check("tools round-trip on a fresh phone-proof read", JSON.stringify(r.json?.request?.assessment?.tools) === JSON.stringify(["Ladder", "Drill machine", "Sealant gun"]), r.raw.slice(0, 240));
 await call(api.partners, { method: "POST", body: { ...partnerBody, code: "PRT-2026-PENDING", businessName: "Pending Pros Ltd", email: "pending@partner.test", phone: "08037778888" } });
 r = await call(api.snapAssign, { method: "POST", headers: { cookie: adminCookie }, body: { code: "SR-2026-SMOKE", partnerCode: "PRT-2026-PENDING", agreedPriceNgn: 45000 } });
 check("assigning an UNAPPROVED partner rejected (400)", r.status === 400, `got ${r.status}: ${r.raw.slice(0, 160)}`);

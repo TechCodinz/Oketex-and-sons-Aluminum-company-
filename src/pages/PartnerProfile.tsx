@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { ArrowLeft, BadgeCheck, MapPin, MessageCircle, Star, ShieldCheck } from "lucide-react";
 import { PageHead } from "@/components/StatusBadge";
 import { formatNGN } from "@/lib/money";
-import { findPartner, findPartnerAsync, addLeadAsync, toPublicPartner, type Partner } from "@/lib/partnerStorage";
+import { findPartner, findPartnerAsync, addLeadAsync, toPublicPartner, partnerKindTags, type Partner } from "@/lib/partnerStorage";
 import {  } from "@/data/partnerTerms";
 import { getPartnerTerms, businessWaLink, getBusiness } from "@/lib/settings";
 import { notify } from "@/lib/notify";
@@ -104,6 +104,7 @@ export default function PartnerProfile() {
             {partner.featured && <span className="absolute -top-3 left-4 bg-primary text-primary-foreground font-tech text-[10px] uppercase tracking-widest px-2 py-1 inline-flex items-center gap-1"><Star className="h-3 w-3" /> Featured</span>}
             <div className="flex flex-wrap items-center gap-3">
               <span className="font-tech text-[10px] uppercase tracking-widest px-2 py-1 border border-white/20">{isBoth ? "Pro + Seller" : isSeller ? "Seller" : "Pro"}</span>
+              {partnerKindTags(partner).map(k => <span key={k} className="font-tech text-[10px] uppercase tracking-widest px-2 py-1 border border-primary/50 text-primary">{k}</span>)}
               {partner.sample && <span className="font-tech text-[10px] uppercase tracking-widest text-yellow-400 border border-yellow-500/40 px-2 py-1">Sample listing</span>}
               {partner.verified && <span className="inline-flex items-center gap-1 font-tech text-[10px] uppercase tracking-widest text-primary"><BadgeCheck className="h-4 w-4" /> Verified by Oketex</span>}
             </div>

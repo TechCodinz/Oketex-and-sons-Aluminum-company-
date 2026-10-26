@@ -15,7 +15,10 @@ export type SnapStatus = "Received" | "Under Review" | "Priced" | "Approved" | "
 export type SnapUrgency = "Normal" | "Urgent" | "Emergency";
 
 export interface SnapItem { name: string; qty: number; unitPrice: number }
-export interface SnapAssessment { items: SnapItem[]; workmanshipNgn: number; transportNgn: number; dispatchNgn: number; notes: string }
+export interface SnapAssessment { items: SnapItem[]; workmanshipNgn: number; transportNgn: number; dispatchNgn: number; notes: string; tools: string[] }
+/** Standard tools/equipment the assessment editor suggests (chips +
+ *  datalist). Free text is always allowed on top of these. */
+export const STANDARD_TOOLS = ["Ladder", "Scaffold", "Drill machine", "Angle grinder", "Sealant gun", "Pipe wrench", "Spirit level", "Measuring tape", "Trowel", "Welding machine", "Safety boots/gloves", "Water pump pliers"];
 export interface SnapTimelineEntry { ts: string; by: "customer" | "admin" | "partner"; text: string; photo?: string }
 
 export interface SnapRequest {
